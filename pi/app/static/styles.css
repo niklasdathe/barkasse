@@ -1,0 +1,29 @@
+html,body { margin:0; height:100%; font-family:system-ui,Segoe UI,Arial,sans-serif; }
+#bg {
+  position:fixed; inset:0;
+  background: url('/static/assets/background.png') center/cover no-repeat;
+  filter: contrast(1.05) saturate(1.05);
+}
+#hud {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; height:100%;
+  background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25));
+}
+header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 16px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);
+}
+main#grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap:12px; padding:12px;
+}
+.tile {
+  background: rgba(255,255,255,.82);
+  border-radius:16px; padding:12px 14px;
+  box-shadow: 0 6px 14px rgba(0,0,0,.15);
+}
+.tile h3 { margin:0 0 4px 0; font-size:16px; }
+.tile .meta { color:#444; font-size:12px; opacity:.8; }
+.tile .value { font-size:32px; font-weight:700; margin-top:6px; }
+.tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
