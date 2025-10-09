@@ -1,0 +1,12 @@
+[Unit]
+Description=Chromium Kiosk
+After=systemd-user-sessions.service graphical.target barkasse-ui.service
+
+[Service]
+User=pi
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/bin/chromium-browser --kiosk --incognito --app=http://localhost:8080
+Restart=always
+
+[Install]
+WantedBy=graphical.target
