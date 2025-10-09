@@ -13,14 +13,13 @@ A tiny, incredibly easy-to-extend sensor hub for the Barkasse project.
 - Cluster summary (optional): `.../<cluster>/state` with `{"sensors": { ... }}`
 
 ## Folders
-- `esp32p4-weather` – Arduino demo firmware
+- `esp32p4-weather-mock` – Arduino demo firmware
 - `pi/docker-compose.yml` – Mosquitto broker
 - `pi/app` – FastAPI + WebSocket + UI (static)
-- `pi/systemd` – services to autostart UI + kiosk
 
 ## Getting Started
 1. Bring up Mosquitto (`docker compose up -d` in `pi/`).
-2. Start UI (`uvicorn main:app ...` or enable systemd services).
+2. Start UI (`uvicorn main:app ...`).
 3. Flash the ESP32-P4 with your MQTT credentials.
 4. Open the UI on the Pi’s touchscreen; tiles will populate live.
 
