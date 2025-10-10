@@ -6,9 +6,10 @@ After=network-online.target docker.service auto-git-update.service
 Wants=network-online.target
 
 [Service]
-User=pi
-WorkingDirectory=/home/pi/barkasse-hub/pi/app
-ExecStart=/home/pi/barkasse-hub/pi/app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080
+User=hub
+WorkingDirectory=/home/hub/barkasse-hub/pi/app
+ExecStart=/home/hub/barkasse-hub/pi/app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080
+Environment=XDG_RUNTIME_DIR=/run/user/1001
 Restart=always
 
 [Install]
