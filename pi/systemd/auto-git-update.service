@@ -1,0 +1,28 @@
+[Unit]
+Description=Auto-update Barkasse project from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/barkasse-hub
+ExecStart=/bin/bash -c '
+  echo "[AUTO-UPDATE] Checking internet...";
+  ping -c1 github.com >/dev/null 2>&1 || exit 0;
+  echo "[AUTO-UPDATE] Internet OK. Pulling latest changes...";
+  git fetch origin main;
+  LOCAL=$(git rev-parse @)
+  REMOTE=$(git rev-parse @{u})
+  if [ "$LOCAL" != "$REMOTE" ]; then
+      echo "[AUTO-UPDATE] New version found, pulling...";
+      git reset --hard origin/main;
+      git pull;
+      echo "[AUTO-UPDATE] Done."
+  else
+      echo "[AUTO-UPDATE] Already up to date."
+  fi
+'
+
+[Install]
+WantedBy=multi-user.target
