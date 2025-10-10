@@ -43,6 +43,11 @@ const unsigned long PUBLISH_MS = 2000; // 2 s cadence for demo
 float tC = 19.5, rh = 55.0, p = 1012.0, wind = 1.0, windDir = 180.0;
 
 // ------------------- Time (for ISO timestamps) --------
+bool isTimeValid() {
+  time_t now; time(&now);
+  return (now > 1672531200); // After 2023-01-01 means NTP synced
+}
+
 String isoNow() {
   time_t now; time(&now);
   struct tm t; gmtime_r(&now, &t);
@@ -127,9 +132,7 @@ void WiFiEvent(WiFiEvent_t event) {
 void setup() {
   Serial.begin(115200);
   delay(200);
-
-  // Time (for timestamps) via SNTP
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("\n[Barkasse Weather Mock] Starting...");
 
   // Start Ethernet (RMII PHY). Adjust pins/PHY type for your board if needed.
   // Common defaults work for many ESP32 + LAN8720 boards.
@@ -139,6 +142,34 @@ void setup() {
   // If you use W5500 over SPI instead of RMII:
   // #define W5500_SWITCH
   // ... include <Ethernet.h> and initialize Ethernet.begin(mac, ip) accordingly.
+
+  // Wait for Ethernet connection
+  Serial.print("[ETH] Waiting for connection");
+  while (!eth_connected) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println(" connected!");
+
+  // Time (for timestamps) via SNTP
+  Serial.println("[NTP] Synchronizing time...");
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  
+  // Wait for NTP sync (up to 10 seconds)
+  int attempts = 0;
+  while (!isTimeValid() && attempts < 20) {
+    Serial.print(".");
+    delay(500);
+    attempts++;
+  }
+  
+  if (isTimeValid()) {
+    Serial.println(" time synced!");
+    Serial.print("[NTP] Current time: ");
+    Serial.println(isoNow());
+  } else {
+    Serial.println(" WARNING: Time sync failed! Timestamps may be incorrect.");
+  }
 }
 
 // ------------------- Loop -----------------------------
@@ -148,26 +179,30 @@ void loop() {
       mqttConnect();
     } else {
       mqtt.loop();
-      unsigned long now = millis();
-      if (now - lastPublish > PUBLISH_MS) {
-        lastPublish = now;
+      
+      // Only publish if time is valid
+      if (isTimeValid()) {
+        unsigned long now = millis();
+        if (now - lastPublish > PUBLISH_MS) {
+          lastPublish = now;
 
-        // evolve demo values
-        tC      = jitter(tC,   0.08, -5.0, 40.0);
-        rh      = jitter(rh,   0.5,   0.0, 100.0);
-        p       = jitter(p,    0.6, 950.0, 1050.0);
-        wind    = jitter(wind, 0.2,   0.0, 20.0);
-        windDir = fmod(jitter(windDir, 8.0, 0.0, 360.0), 360.0);
+          // evolve demo values
+          tC      = jitter(tC,   0.08, -5.0, 40.0);
+          rh      = jitter(rh,   0.5,   0.0, 100.0);
+          p       = jitter(p,    0.6, 950.0, 1050.0);
+          wind    = jitter(wind, 0.2,   0.0, 20.0);
+          windDir = fmod(jitter(windDir, 8.0, 0.0, 360.0), 360.0);
 
-        // per-sensor topics
-        publishSensor("temperature", tC, "°C");
-        publishSensor("humidity",    rh, "%");
-        publishSensor("pressure",    p,  "hPa");
-        publishSensor("wind_speed",  wind, "m/s");
-        publishSensor("wind_dir",    windDir, "°");
+          // per-sensor topics
+          publishSensor("temperature", tC, "°C");
+          publishSensor("humidity",    rh, "%");
+          publishSensor("pressure",    p,  "hPa");
+          publishSensor("wind_speed",  wind, "m/s");
+          publishSensor("wind_dir",    windDir, "°");
 
-        // cluster summary
-        publishCluster();
+          // cluster summary
+          publishCluster();
+        }
       }
     }
   }

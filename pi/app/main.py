@@ -72,13 +72,8 @@ def push_history(k: str, p: dict):
     if dq is None:
         dq = HISTORY[k] = deque(maxlen=MAX_HISTORY_POINTS)
     dq.append({"ts": p["ts"], "value": vv, "unit": unit})
-    # prune by age
-    try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)
-        while dq and datetime.fromisoformat(dq[0]["ts"]) < cutoff:
-            dq.popleft()
-    except Exception:
-        pass
+    # Note: Age-based pruning disabled to support relative timestamps
+    # The maxlen on the deque provides a point-count limit instead
 
 async def broadcast(msg: dict):
     dead = []
@@ -161,12 +156,25 @@ def history(key: str, period: str = Query("1h", regex="^(1h|1d|max)$")):
     dq = HISTORY.get(key, deque())
     if not dq:
         return JSONResponse({"key": key, "unit": "", "data": []})
-    now = datetime.now(timezone.utc)
+    
+    # Use relative filtering from the most recent data point instead of "now"
+    data_list = list(dq)
+    if not data_list:
+        return JSONResponse({"key": key, "unit": "", "data": []})
+    
+    # Get the newest timestamp in the data
+    try:
+        newest_ts = datetime.fromisoformat(data_list[-1]["ts"])
+    except Exception:
+        # If we can't parse the newest timestamp, return all data
+        return JSONResponse({"key": key, "unit": data_list[0].get("unit", ""), "data": data_list})
+    
     cutoff = None
-    if period == "1h": cutoff = now - timedelta(hours=1)
-    elif period == "1d": cutoff = now - timedelta(days=1)
+    if period == "1h": cutoff = newest_ts - timedelta(hours=1)
+    elif period == "1d": cutoff = newest_ts - timedelta(days=1)
+    
     data, unit = [], ""
-    for p in dq:
+    for p in data_list:
         try:
             ts = datetime.fromisoformat(p["ts"])
         except Exception:
