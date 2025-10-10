@@ -18,7 +18,7 @@ def key_from_payload(p):
     return f"{node}/{cluster}/{sensor}"
 
 # --- MQTT ---
-MQTT_HOST = "127.0.0.1"
+MQTT_HOST = "192.168.50.1"
 MQTT_PORT = 1883
 MQTT_USER = "barkasse"
 MQTT_PASS = "change-me"
@@ -27,12 +27,15 @@ m = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="barkasse-hub-ui")
 m.username_pw_set(MQTT_USER, MQTT_PASS)
 
 def on_connect(client, userdata, flags, rc, properties=None):
+    print(f"[MQTT] Connected to broker {MQTT_HOST}:{MQTT_PORT} (rc={rc})")
     client.subscribe("barkasse/#", qos=0)
 
 def on_message(client, userdata, msg):
     try:
+        print(f"[MQTT] {msg.topic}: {msg.payload[:120]}")
         payload = json.loads(msg.payload.decode("utf-8"))
-    except Exception:
+    except Exception as e:
+        print("decode error:", e)
         return
     # Normalize cluster/state aggregate:
     if "sensors" in payload and isinstance(payload["sensors"], dict):
