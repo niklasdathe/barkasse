@@ -21,13 +21,15 @@
       </div>
     </header>
 
+    <!-- Tiles first -->
+    <main id="grid"><!-- tiles injected here --></main>
+
+    <!-- Chart now below the tiles -->
     <section id="chart-section" class="chart-section" aria-label="History chart drop target">
       <canvas id="chart" width="1200" height="260"></canvas>
       <div id="chart-hint">Drag a tile here to view its history</div>
       <div id="chart-title">—</div>
     </section>
-
-    <main id="grid"><!-- tiles injected here --></main>
 
     <div id="trash" class="trash" aria-label="Drop here to remove tile">
       🗑️ Drop to remove
@@ -36,4 +38,3 @@
 
   <script src="/static/app.js"></script>
 </body>
-</html>
