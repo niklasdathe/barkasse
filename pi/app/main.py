@@ -1,40 +1,38 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
-from typing import Dict, Deque, List
+from typing import Dict, Deque
 from collections import deque
 from datetime import datetime, timezone, timedelta
-import asyncio, json
+import asyncio, json, threading
 import paho.mqtt.client as mqtt
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ---------------- Stores ----------------
-LATEST: Dict[str, dict] = {}             # key -> last payload
-HISTORY: Dict[str, Deque[dict]] = {}     # key -> deque of {"ts", "value", "unit"}
+LATEST: Dict[str, dict] = {}
+HISTORY: Dict[str, Deque[dict]] = {}
 MAX_HISTORY_POINTS = 20000
 KEEP_DAYS = 14
 
-# WS clients + event queue (MQTT → loop)
 CLIENTS = set()
-EVENT_Q: asyncio.Queue = asyncio.Queue()
+
+# Will be initialized on startup so we have the REAL running loop
+EVENT_Q: asyncio.Queue | None = None
+LOOP: asyncio.AbstractEventLoop | None = None
 
 def key_from_payload(p: dict) -> str:
-    node = p.get("node","?")
-    cluster = p.get("cluster","?")
-    sensor = p.get("sensor","state")
-    return f"{node}/{cluster}/{sensor}"
+    return f"{p.get('node','?')}/{p.get('cluster','?')}/{p.get('sensor','state')}"
 
-def to_iso_utc(ts) -> str:
-    # Accept ISO, epoch s/ms; fallback to now
+def to_iso_utc(ts):
     try:
         if ts is None or ts == "": raise ValueError
         if isinstance(ts,(int,float)) or (isinstance(ts,str) and ts.strip().replace(".","",1).isdigit()):
-            n = float(ts)
-            if n > 1e12: n /= 1e6
-            if n > 1e10: dt = datetime.fromtimestamp(n/1000.0, tz=timezone.utc)
-            else:        dt = datetime.fromtimestamp(n, tz=timezone.utc)
+            n=float(ts)
+            if n>1e12: n/=1e6
+            if n>1e10: dt=datetime.fromtimestamp(n/1000.0,tz=timezone.utc)
+            else: dt=datetime.fromtimestamp(n,tz=timezone.utc)
             return dt.isoformat()
         return datetime.fromisoformat(str(ts).replace("Z","+00:00")).astimezone(timezone.utc).isoformat()
     except Exception:
@@ -47,10 +45,8 @@ def ensure_ts(p: dict) -> dict:
 def push_history(k: str, p: dict):
     v = p.get("value")
     if v is None: return
-    try:
-        vv = float(v)
-    except Exception:
-        return
+    try: vv = float(v)
+    except Exception: return
     unit = p.get("unit") or ""
     dq = HISTORY.get(k)
     if dq is None:
@@ -67,12 +63,9 @@ def push_history(k: str, p: dict):
 async def broadcast(msg: dict):
     dead = []
     for c in list(CLIENTS):
-        try:
-            await c.send_json(msg)
-        except Exception:
-            dead.append(c)
-    for d in dead:
-        CLIENTS.discard(d)
+        try: await c.send_json(msg)
+        except Exception: dead.append(c)
+    for d in dead: CLIENTS.discard(d)
 
 # ---------- MQTT (thread) ----------
 MQTT_HOST = "192.168.50.1"
@@ -88,52 +81,55 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe("barkasse/#", qos=0)
 
 def on_message(client, userdata, msg):
+    # Runs in paho thread — MUST hand off to asyncio loop thread-safely
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
     except Exception as e:
-        print("[MQTT] decode error:", e)
-        return
-    # Normalize into individual sensor payloads
+        print("[MQTT] decode error:", e); return
+
     items = []
     if isinstance(payload, dict) and isinstance(payload.get("sensors"), dict):
         base = {k: payload.get(k) for k in ("node","cluster","ts")}
         for sname, sobj in payload["sensors"].items():
             if not isinstance(sobj, dict): continue
-            o = dict(base)
-            o["sensor"] = sname
-            o.update(sobj)
-            items.append(o)
+            o = dict(base); o["sensor"] = sname; o.update(sobj)
+            items.append(ensure_ts(o))
     elif isinstance(payload, dict):
-        items.append(payload)
+        items.append(ensure_ts(payload))
 
-    # Hand off to asyncio loop
-    for it in items:
-        it = ensure_ts(it)
-        try:
-            EVENT_Q.put_nowait(it)
-        except asyncio.QueueFull:
-            pass
+    # Thread-safe enqueue into asyncio loop
+    if LOOP and EVENT_Q:
+        for it in items:
+            LOOP.call_soon_threadsafe(EVENT_Q.put_nowait, it)
 
 m.on_connect = on_connect
 m.on_message = on_message
-m.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
-m.loop_start()
 
 # ---------- Background worker ----------
 async def event_worker():
+    assert EVENT_Q is not None
     while True:
         p = await EVENT_Q.get()
         try:
             k = key_from_payload(p)
             LATEST[k] = p
             push_history(k, p)
-            await broadcast({"type":"update", "data": p})
+            await broadcast({"type":"update","data":p})
         finally:
             EVENT_Q.task_done()
 
 @app.on_event("startup")
 async def _startup():
+    global LOOP, EVENT_Q
+    LOOP = asyncio.get_running_loop()
+    EVENT_Q = asyncio.Queue()
+    # Start worker(s)
     asyncio.create_task(event_worker())
+    # Start MQTT loop in its own thread AFTER LOOP is set
+    def _start_mqtt():
+        m.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+        m.loop_forever()
+    threading.Thread(target=_start_mqtt, daemon=True).start()
 
 # ---------- HTTP ----------
 @app.get("/")
@@ -155,22 +151,24 @@ def history(key: str, period: str = Query("1h", regex="^(1h|1d|max)$")):
             ts = datetime.fromisoformat(p["ts"])
         except Exception:
             continue
-        if cutoff and ts < cutoff:
-            continue
-        data.append(p)
-        unit = p.get("unit", unit)
+        if cutoff and ts < cutoff: continue
+        data.append(p); unit = p.get("unit", unit)
     return JSONResponse({"key": key, "unit": unit, "data": data})
 
-@app.get("/topics")
-def topics():
-    return JSONResponse(sorted(LATEST.keys()))
+@app.get("/debug/stats")
+def stats():
+    return {
+        "topics": len(LATEST),
+        "history_topics": len(HISTORY),
+        "history_points_total": sum(len(dq) for dq in HISTORY.values())
+    }
 
 # ---------- WS ----------
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     CLIENTS.add(ws)
-    await ws.send_json({"type":"snapshot", "data": list(LATEST.values())})
+    await ws.send_json({"type":"snapshot","data": list(LATEST.values())})
     try:
         while True:
             await ws.receive_text()
