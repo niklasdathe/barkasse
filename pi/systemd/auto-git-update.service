@@ -7,22 +7,22 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=pi
-WorkingDirectory=/home/pi/barkasse-hub
-ExecStart=/bin/bash -c '
+User=hub
+WorkingDirectory=/home/hub/barkasse-hub
+ExecStart=/bin/bash -lc '
   echo "[AUTO-UPDATE] Checking internet...";
-  ping -c1 github.com >/dev/null 2>&1 || exit 0;
-  echo "[AUTO-UPDATE] Internet OK. Pulling latest changes...";
+  ping -c1 github.com >/dev/null 2>&1 || { echo "[AUTO-UPDATE] No internet."; exit 0; }
+  echo "[AUTO-UPDATE] Internet OK. Checking branch main...";
   git fetch origin main;
-  LOCAL=$(git rev-parse @)
-  REMOTE=$(git rev-parse @{u})
+  LOCAL=$(git rev-parse @ 2>/dev/null || echo 0)
+  REMOTE=$(git rev-parse @{u} 2>/dev/null || echo 1)
   if [ "$LOCAL" != "$REMOTE" ]; then
-      echo "[AUTO-UPDATE] New version found, pulling...";
+      echo "[AUTO-UPDATE] Pulling latest...";
       git reset --hard origin/main;
-      git pull;
-      echo "[AUTO-UPDATE] Done."
+      git pull --ff-only;
+      echo "[AUTO-UPDATE] Updated."
   else
-      echo "[AUTO-UPDATE] Already up to date."
+      echo "[AUTO-UPDATE] Already up-to-date."
   fi
 '
 
