@@ -6,12 +6,15 @@ After=graphical.target barkasse-ui.service
 Wants=barkasse-ui.service
 
 [Service]
-User=pi
-Environment=XDG_RUNTIME_DIR=/run/user/1000
+User=hub
+Environment=XDG_RUNTIME_DIR=/run/user/1001
 ExecStart=/usr/bin/chromium-browser \
   --kiosk --incognito --noerrdialogs --disable-infobars \
-  --app=http://localhost:8080
-Restart=always
+  --app=http://localhost:8080 \
+  --start-fullscreen --check-for-update-interval=31536000
+Restart=on-failure
+RestartSec=5s
+
 
 [Install]
 WantedBy=graphical.target
