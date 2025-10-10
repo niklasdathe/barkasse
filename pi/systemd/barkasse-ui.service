@@ -1,3 +1,5 @@
+# move to /etc/systemd/system/barkasse-ui.service
+
 [Unit]
 Description=Barkasse Hub UI Backend
 After=network-online.target docker.service auto-git-update.service
