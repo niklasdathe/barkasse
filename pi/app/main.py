@@ -27,15 +27,35 @@ def key_from_payload(p: dict) -> str:
 
 def to_iso_utc(ts):
     try:
-        if ts is None or ts == "": raise ValueError
-        if isinstance(ts,(int,float)) or (isinstance(ts,str) and ts.strip().replace(".","",1).isdigit()):
-            n=float(ts)
-            if n>1e12: n/=1e6
-            if n>1e10: dt=datetime.fromtimestamp(n/1000.0,tz=timezone.utc)
-            else: dt=datetime.fromtimestamp(n,tz=timezone.utc)
+        if ts is None or ts == "":
+            raise ValueError
+        # Handle numeric-like timestamps (seconds/milliseconds/microseconds/nanoseconds)
+        if isinstance(ts, (int, float)) or (
+            isinstance(ts, str) and ts.strip().replace(".", "", 1).isdigit()
+        ):
+            n = float(ts)
+            an = abs(n)
+            # Normalize by magnitude:
+            # - >=1e17: nanoseconds → seconds
+            # - >=1e14: microseconds → seconds
+            # - >=1e11: milliseconds → seconds
+            if an >= 1e17:
+                n /= 1e9
+            elif an >= 1e14:
+                n /= 1e6
+            elif an >= 1e11:
+                n /= 1e3
+            dt = datetime.fromtimestamp(n, tz=timezone.utc)
             return dt.isoformat()
-        return datetime.fromisoformat(str(ts).replace("Z","+00:00")).astimezone(timezone.utc).isoformat()
+        # Handle ISO-8601 strings (support trailing Z)
+        s = str(ts)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return (
+            datetime.fromisoformat(s).astimezone(timezone.utc).isoformat()
+        )
     except Exception:
+        # Fallback to now to avoid dropping points entirely if parsing fails
         return datetime.now(timezone.utc).isoformat()
 
 def ensure_ts(p: dict) -> dict:
