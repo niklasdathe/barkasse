@@ -1,55 +1,71 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
-from typing import Dict, Deque, List
+from typing import Dict, Deque, List, Optional, Union
 from collections import deque
 from datetime import datetime, timezone, timedelta
 import json, asyncio
 import paho.mqtt.client as mqtt
 
-# ---------- App / Static ----------
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------- Live Store ----------
-LATEST: Dict[str, dict] = {}                       # key -> last payload
-HISTORY: Dict[str, Deque[dict]] = {}               # key -> deque of {"ts": iso, "value": float, "unit": str}
+# -------- Live store & history --------
+LATEST: Dict[str, dict] = {}            # key -> last payload (full JSON)
+HISTORY: Dict[str, Deque[dict]] = {}    # key -> deque of {"ts": iso, "value": float, "unit": str}
 CLIENTS = set()
 
-# History config (tune as needed)
-MAX_HISTORY_POINTS = 20000                         # per topic ring buffer
-KEEP_DAYS = 14                                     # older data pruned on insert if beyond this window
+MAX_HISTORY_POINTS = 20000              # per topic ring buffer
+KEEP_DAYS = 14                          # optional time-based prune
 
-# ---------- Helpers ----------
+# -------- Helpers --------
 def key_from_payload(p: dict) -> str:
     node = p.get("node", "?")
     cluster = p.get("cluster", "?")
     sensor = p.get("sensor", "state")
     return f"{node}/{cluster}/{sensor}"
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def to_iso_utc_from_any(ts: Optional[Union[str, int, float]]) -> str:
+    """Accepts ISO8601 string, epoch seconds, or epoch millis. Returns ISO8601 with offset."""
+    if ts is None or ts == "":
+        return datetime.now(timezone.utc).isoformat()
+    try:
+        # numeric? epoch seconds or ms
+        if isinstance(ts, (int, float)) or (isinstance(ts, str) and ts.strip().isdigit()):
+            n = float(ts)
+            # Heuristic: treat large numbers as ms
+            if n > 1e12:  # very large (ns) → scale down
+                n = n / 1e6
+            if n > 1e10:  # ms
+                dt = datetime.fromtimestamp(n / 1000.0, tz=timezone.utc)
+            else:         # s
+                dt = datetime.fromtimestamp(n, tz=timezone.utc)
+            return dt.isoformat()
+        # string ISO?
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
+    except Exception:
+        return datetime.now(timezone.utc).isoformat()
 
 def ensure_ts(payload: dict) -> dict:
-    if not payload.get("ts"):
-        payload["ts"] = now_iso()
+    payload["ts"] = to_iso_utc_from_any(payload.get("ts"))
     return payload
 
 def push_history(k: str, payload: dict):
-    # Only store scalar numeric values for charting; ignore if missing
     val = payload.get("value", None)
     if val is None:
         return
-    # Normalize unit (optional)
+    try:
+        v = float(val)
+    except Exception:
+        return
     unit = payload.get("unit") or ""
     ts_iso = payload["ts"]
-
     dq = HISTORY.get(k)
     if dq is None:
         dq = HISTORY[k] = deque(maxlen=MAX_HISTORY_POINTS)
-    dq.append({"ts": ts_iso, "value": float(val), "unit": unit})
+    dq.append({"ts": ts_iso, "value": v, "unit": unit})
 
-    # Optional time-based prune beyond KEEP_DAYS
+    # Optional prune by age
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)
         while dq and datetime.fromisoformat(dq[0]["ts"]) < cutoff:
@@ -67,7 +83,7 @@ async def broadcast(msg: dict):
     for d in dead:
         CLIENTS.discard(d)
 
-# ---------- MQTT ----------
+# -------- MQTT --------
 MQTT_HOST = "192.168.50.1"
 MQTT_PORT = 1883
 MQTT_USER = "barkasse"
@@ -77,7 +93,7 @@ m = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="barkasse-hub-ui")
 m.username_pw_set(MQTT_USER, MQTT_PASS)
 
 def on_connect(client, userdata, flags, rc, properties=None):
-    print(f"[MQTT] Connected to {MQTT_HOST}:{MQTT_PORT} (rc={rc})")
+    print(f"[MQTT] Connected {MQTT_HOST}:{MQTT_PORT} rc={rc}")
     client.subscribe("barkasse/#", qos=0)
 
 def _handle_payload(p: dict):
@@ -85,7 +101,6 @@ def _handle_payload(p: dict):
     k = key_from_payload(p)
     LATEST[k] = p
     push_history(k, p)
-    # Broadcast to all WS clients
     asyncio.run(broadcast({"type": "update", "data": p}))
 
 def on_message(client, userdata, msg):
@@ -95,8 +110,7 @@ def on_message(client, userdata, msg):
         print("[MQTT] decode error:", e)
         return
 
-    # Cluster aggregate {"sensors":{...}} → explode individual entries
-    if isinstance(payload, dict) and "sensors" in payload and isinstance(payload["sensors"], dict):
+    if isinstance(payload, dict) and isinstance(payload.get("sensors"), dict):
         base = {k: payload.get(k) for k in ("node", "cluster", "ts")}
         for sname, sobj in payload["sensors"].items():
             o = dict(base)
@@ -104,30 +118,28 @@ def on_message(client, userdata, msg):
             if isinstance(sobj, dict):
                 o.update(sobj)
             _handle_payload(o)
-    else:
-        if isinstance(payload, dict):
-            _handle_payload(payload)
+    elif isinstance(payload, dict):
+        _handle_payload(payload)
 
 m.on_connect = on_connect
 m.on_message = on_message
 m.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
 m.loop_start()
 
-# ---------- HTTP ----------
+# -------- HTTP --------
 @app.get("/")
 def root():
     return HTMLResponse(open("static/index.html", "r", encoding="utf-8").read())
 
 @app.get("/history")
 def get_history(
-    key: str = Query(..., description="node/cluster/sensor"),
+    key: str = Query(..., description="Format: node/cluster/sensor"),
     period: str = Query("1d", regex="^(1h|1d|max)$")
 ):
     dq = HISTORY.get(key, deque())
     if not dq:
         return JSONResponse({"key": key, "unit": "", "data": []})
 
-    # Filter by time window
     now = datetime.now(timezone.utc)
     if period == "1h":
         cutoff = now - timedelta(hours=1)
@@ -154,16 +166,14 @@ def get_history(
 def topics():
     return JSONResponse(sorted(LATEST.keys()))
 
-# ---------- WebSocket ----------
+# -------- WebSocket --------
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     CLIENTS.add(ws)
-    # Snapshot: send current LATEST values
     await ws.send_json({"type": "snapshot", "data": list(LATEST.values())})
     try:
         while True:
-            # No incoming commands yet; keep the socket open
             await ws.receive_text()
     except WebSocketDisconnect:
         CLIENTS.discard(ws)
