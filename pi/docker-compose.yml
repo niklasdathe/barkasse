@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   mosquitto:
     image: eclipse-mosquitto:2
@@ -6,6 +5,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto:/mosquitto/config         # <— dir mount (includes passwd)
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+

@@ -1,0 +1,4 @@
+# Ignore Mosquitto password file
+pi/mosquitto/passwd
+# Ignore Mosquitto database file
+pi/mosquitto/data/mosquitto.db
