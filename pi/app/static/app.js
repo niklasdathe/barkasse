@@ -12,32 +12,39 @@ const periodButtons = Array.from(document.querySelectorAll('#periods button'));
 
 const store = new Map();                 // key -> latest payload
 const mutedUntilNextUpdate = new Set();  // keys muted by user
+const lastSeen = new Map();   // key -> Date.now() of last WS update we saw
 let ws, reconnectTimer = null;
 let draggedTile = null;
 let allowAutoSort = true;
 let currentChartKey = null;
 let currentChartPeriod = '1h';
 
+
+
 // ---- Timestamp handling: ISO / epoch(s) / epoch(ms) → Date ----
 function parseAnyTs(ts) {
   if (ts === undefined || ts === null || ts === '') return null;
-  // numeric epoch?
   if (typeof ts === 'number' || (typeof ts === 'string' && /^\d+(\.\d+)?$/.test(ts))) {
     let n = Number(ts);
-    if (n > 1e12) n = n / 1e6;          // ns → ms
-    if (n > 1e10) return new Date(n);   // ms
-    return new Date(n * 1000);          // s
+    if (n > 1e12) n = n / 1e6;           // ns -> ms
+    if (n > 1e10) return new Date(n);    // ms
+    return new Date(n * 1000);           // s
   }
-  // ISO string
   const iso = String(ts).replace('Z', '+00:00');
   const d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
-function ageMinutes(ts) {
-  const d = parseAnyTs(ts);
-  if (!d) return Infinity;
-  return (Date.now() - d.getTime()) / 60000;
+
+function ageMinutesForKey(k, ts) {
+  const byTs = (() => {
+    const d = parseAnyTs(ts);
+    return d ? (Date.now() - d.getTime()) / 60000 : Infinity;
+  })();
+  const seen = lastSeen.get(k);
+  const bySeen = seen ? (Date.now() - seen) / 60000 : Infinity;
+  return Math.min(byTs, bySeen);
 }
+
 
 // ---- Keys / formatting ----
 function key(o) { return `${o.node}/${o.cluster}/${o.sensor || 'state'}`; }
@@ -87,14 +94,15 @@ function render(o) {
 }
 
 function updateHealthDot(tileEl, ts) {
-  const dot = tileEl.querySelector('.dot');
-  const m = ageMinutes(ts);
+  const k = tileEl.dataset.k;
+  const m = ageMinutesForKey(k, ts);
   let color = '#bbb';
-  if (m < 3) color = '#2ecc71';           // green
-  else if (m >= 60) color = '#e74c3c';    // red
-  else color = '#f1c40f';                 // yellow
-  dot.style.background = color;
+  if (m < 3) color = '#2ecc71';         // green
+  else if (m >= 60) color = '#e74c3c';  // red
+  else color = '#f1c40f';               // yellow
+  tileEl.querySelector('.dot').style.background = color;
 }
+
 
 // refresh dots every 30s
 setInterval(() => {
@@ -128,12 +136,15 @@ function handleMessage(msg) {
     msg.data.forEach(o => {
       const k = key(o);
       store.set(k, o);
+      lastSeen.set(k, Date.now());          // <—
       if (!mutedUntilNextUpdate.has(k)) render(o);
     });
     if (allowAutoSort) sortTiles();
   } else if (msg.type === 'update') {
     const o = msg.data; const k = key(o);
-    store.set(k, o); render(o);
+    store.set(k, o);
+    lastSeen.set(k, Date.now());            // <—
+    render(o);
     if (allowAutoSort) sortTiles();
     if (currentChartKey === k) drawChartFor(currentChartKey, currentChartPeriod);
   }
@@ -245,12 +256,29 @@ async function drawChartFor(k, period) {
   const ctx = chartCanvas.getContext('2d');
   ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
 
-  let payload;
-  try { payload = await fetchHistory(k, period); }
-  catch (e) { console.error('History fetch failed:', e); chartHint.textContent = 'History unavailable'; return; }
+  let payload = { unit:'', data:[] };
+  try {
+    payload = await fetchHistory(k, period);
+  } catch (e) {
+    console.error('History fetch failed:', e);
+  }
 
-  const { unit, data } = payload || { unit:'', data:[] };
-  if (!Array.isArray(data) || data.length === 0) { chartHint.textContent = 'No data'; return; }
+  let { unit, data } = payload || { unit:'', data:[] };
+
+  // --- Fallback: no history yet? Use the latest live reading so the user sees something.
+  if (!Array.isArray(data) || data.length === 0) {
+    const live = store.get(k);
+    if (live && typeof live.value !== 'undefined') {
+      data = [{
+        ts: live.ts || new Date().toISOString(),
+        value: Number(live.value),
+        unit: live.unit || ''
+      }];
+      unit = live.unit || unit;
+    }
+  }
+
+  if (!data.length) { chartHint.textContent = 'No data'; return; }
   chartHint.textContent = '';
 
   const w = chartCanvas.width, h = chartCanvas.height;
