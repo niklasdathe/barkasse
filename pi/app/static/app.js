@@ -146,9 +146,46 @@ function handleMessage(msg) {
 // ---------------------------------------------------------------------------
 
 function sortTiles() {
+  const layoutBefore = captureTilePositions();
   const tiles = Array.from(grid.children);
   tiles.sort((a, b) => a.dataset.k.localeCompare(b.dataset.k));
   tiles.forEach((t) => grid.appendChild(t));
+  animateToNewPositions(layoutBefore);
+}
+
+function captureTilePositions() {
+  const positions = new Map();
+  for (const tile of grid.querySelectorAll('.tile')) {
+    positions.set(tile, tile.getBoundingClientRect());
+  }
+  return positions;
+}
+
+function animateToNewPositions(previousPositions) {
+  requestAnimationFrame(() => {
+    for (const tile of grid.querySelectorAll('.tile')) {
+      if (tile === draggedTile) continue;
+
+      const previous = previousPositions.get(tile);
+      if (!previous) continue;
+
+      const current = tile.getBoundingClientRect();
+      const deltaX = previous.left - current.left;
+      const deltaY = previous.top - current.top;
+
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+        continue;
+      }
+
+      tile.style.transition = 'none';
+      tile.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+      requestAnimationFrame(() => {
+        tile.style.transition = '';
+        tile.style.transform = '';
+      });
+    }
+  });
 }
 
 function getClosestDropTarget(x, y) {
@@ -196,6 +233,8 @@ grid.addEventListener('dragover', (event) => {
   if (!draggedTile) return;
   event.preventDefault();
 
+  const layoutBefore = captureTilePositions();
+
   const dropTarget = getClosestDropTarget(event.clientX, event.clientY);
   let referenceNode = null;
 
@@ -217,6 +256,7 @@ grid.addEventListener('dragover', (event) => {
   }
 
   grid.insertBefore(draggedTile, referenceNode);
+  animateToNewPositions(layoutBefore);
 });
 
 grid.addEventListener('drop', (event) => {
