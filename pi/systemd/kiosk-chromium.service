@@ -1,20 +1,30 @@
-move to /etc/systemd/system/kiosk-chromium.service
-
 [Unit]
-Description=Launch Chromium in fullscreen kiosk mode
-After=graphical.target barkasse-ui.service
-Wants=barkasse-ui.service
+Description=Barkasse Chromium Kiosk (Wayland/Xwayland)
+After=graphical.target systemd-logind.service barkasse-ui.service
+Wants=graphical.target barkasse-ui.service
 
 [Service]
 User=hub
-Environment=XDG_RUNTIME_DIR=/run/user/1001
-ExecStart=/usr/bin/chromium-browser \
-  --kiosk --incognito --noerrdialogs --disable-infobars \
-  --app=http://localhost:8080 \
-  --start-fullscreen --check-for-update-interval=31536000
-Restart=on-failure
-RestartSec=5s
+Group=hub
+# User 1000 runtime (adjust if different)
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=WAYLAND_DISPLAY=wayland-0
+# Fallback DISPLAY for Xwayland-aware libs
+Environment=DISPLAY=:0
 
+# Wait for the Wayland compositor socket
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do [ -S /run/user/1000/wayland-0 ] && exit 0; sleep 0.25; done; echo "No wayland-0 socket"; exit 1'
+
+# Chromium flags for stable kiosk on Wayland
+ExecStart=/usr/bin/chromium-browser \
+  --kiosk --incognito --start-fullscreen \
+  --no-first-run --no-default-browser-check --noerrdialogs --disable-infobars --disable-logging \
+  --enable-features=UseOzonePlatform --ozone-platform=wayland \
+  --app=http://localhost:8080
+
+Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=graphical.target
