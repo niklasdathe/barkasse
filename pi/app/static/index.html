@@ -1,4 +1,4 @@
-R<!doctype html>
+<!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
@@ -11,10 +11,29 @@ R<!doctype html>
   <div id="hud">
     <header>
       <h1>SENSOR-HUB</h1>
-      <span id="conn">connecting…</span>
+      <div class="right">
+        <div id="periods" class="periods" role="group" aria-label="Chart period">
+          <button data-p="1h" class="active">1h</button>
+          <button data-p="1d">1d</button>
+          <button data-p="max">max</button>
+        </div>
+        <span id="conn">connecting…</span>
+      </div>
     </header>
+
+    <section id="chart-section" class="chart-section" aria-label="History chart drop target">
+      <canvas id="chart" width="1200" height="260"></canvas>
+      <div id="chart-hint">Drag a tile here to view its history</div>
+      <div id="chart-title">—</div>
+    </section>
+
     <main id="grid"><!-- tiles injected here --></main>
+
+    <div id="trash" class="trash" aria-label="Drop here to remove tile">
+      🗑️ Drop to remove
+    </div>
   </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
