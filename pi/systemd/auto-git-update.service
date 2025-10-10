@@ -1,3 +1,5 @@
+# move to /etc/systemd/system/auto-git-update.service
+
 [Unit]
 Description=Auto-update Barkasse project from GitHub
 After=network-online.target
