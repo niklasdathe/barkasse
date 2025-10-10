@@ -1,6 +1,6 @@
 [Unit]
-Description=Barkasse Hub UI (FastAPI)
-After=network-online.target docker.service
+Description=Barkasse Hub UI Backend
+After=network-online.target docker.service auto-git-update.service
 Wants=network-online.target
 
 [Service]
