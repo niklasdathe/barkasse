@@ -44,12 +44,22 @@ main#grid {
 .chart-over { outline:2px dashed #4a90e2; border-radius:14px; }
 
 .periods {
-  display:flex; gap:8px; justify-content:flex-end;
-  margin: 0 12px 12px; padding:6px; background:rgba(255,255,255,.85); border-radius:12px;
-  box-shadow:0 6px 14px rgba(0,0,0,.12);
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin: 4px 12px 12px;
 }
-.periods button { border:0; border-radius:8px; padding:6px 12px; background:rgba(0,0,0,.08); cursor:pointer; }
-.periods button.active { background:#000; color:#fff; }
+.periods button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(0,0,0,.08);
+  cursor: pointer;
+}
+.periods button.active {
+  background: #000;
+  color: #fff;
+}
 
 .trash {
   position:fixed; bottom:18px; right:18px;
