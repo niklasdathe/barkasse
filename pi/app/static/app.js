@@ -244,11 +244,22 @@ trash.addEventListener('drop', (e) => {
 
   const k = draggedTile.dataset.k;
   mutedUntilNextUpdate.add(k);
+
+  // If chart currently shows this key, clear the chart title/hint
+  if (currentChartKey === k) {
+    currentChartKey = null;
+    chartTitle.textContent = '—';
+    chartHint.textContent = 'Drag a tile here to view its history';
+    const ctx = chartCanvas.getContext('2d');
+    ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+  }
+
   draggedTile.style.display = 'none';
   draggedTile.classList.remove('dragging');
   draggedTile = null;
   showTrash(false);
 });
+
 
 // Chart drop
 chartSection.addEventListener('dragover', (e) => {
@@ -256,6 +267,16 @@ chartSection.addEventListener('dragover', (e) => {
   e.preventDefault();
 });
 chartSection.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  if (!draggedTile) return;
+  const k = draggedTile.dataset.k;
+  await drawChartFor(k, currentChartPeriod);
+});
+chartCanvas.addEventListener('dragover', (e) => {
+  if (!draggedTile) return;
+  e.preventDefault();
+});
+chartCanvas.addEventListener('drop', async (e) => {
   e.preventDefault();
   if (!draggedTile) return;
   const k = draggedTile.dataset.k;
@@ -300,18 +321,29 @@ async function fetchHistory(k, period) {
 }
 
 async function drawChartFor(k, period) {
-  const ctx = chartCanvas.getContext('2d');
-  const { unit, data } = await fetchHistory(k, period);
-
   currentChartKey = k;
   chartTitle.textContent = `${k} (${period})`;
-  chartHint.textContent = data.length ? '' : 'No data';
-  // Clear
+
+  const ctx = chartCanvas.getContext('2d');
   ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
 
-  if (!data.length) return;
+  let payload;
+  try {
+    payload = await fetchHistory(k, period);
+  } catch (err) {
+    console.error('History fetch failed:', err);
+    chartHint.textContent = 'History unavailable';
+    return;
+  }
+  const { unit, data } = payload || { unit: '', data: [] };
 
-  // Prepare scales
+  if (!Array.isArray(data) || data.length === 0) {
+    chartHint.textContent = 'No data';
+    return;
+  }
+  chartHint.textContent = '';
+
+  // ... (keep your existing chart drawing code)
   const w = chartCanvas.width, h = chartCanvas.height;
   const padL = 50, padR = 12, padT = 12, padB = 24;
   const plotW = w - padL - padR;
@@ -323,11 +355,11 @@ async function drawChartFor(k, period) {
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const yRange = (maxY - minY) || 1;
 
-  // Axes
-  ctx.lineWidth = 1; ctx.globalAlpha = 1;
-  ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, h - padB); ctx.lineTo(w - padR, h - padB); ctx.stroke();
+  // axes
+  ctx.lineWidth = 1; ctx.globalAlpha = 1; ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, h - padB); ctx.lineTo(w - padR, h - padB); ctx.stroke();
 
-  // Y ticks (4)
+  // Y ticks
   ctx.font = '12px system-ui';
   for (let i = 0; i <= 4; i++) {
     const yv = minY + (yRange * i / 4);
@@ -338,7 +370,7 @@ async function drawChartFor(k, period) {
     ctx.globalAlpha = 1;
   }
 
-  // Line
+  // line
   ctx.beginPath();
   data.forEach((d, i) => {
     const tx = new Date(d.ts).getTime();
@@ -348,7 +380,7 @@ async function drawChartFor(k, period) {
   });
   ctx.stroke();
 
-  // Last point marker + label
+  // last point label
   const last = data[data.length - 1];
   const lx = padL + ((new Date(last.ts).getTime() - minX) / (maxX - minX || 1)) * plotW;
   const ly = h - padB - ((last.value - minY) / yRange) * plotH;
