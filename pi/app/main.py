@@ -141,15 +141,13 @@ def get_history(
         return JSONResponse({"key": key, "unit": "", "data": []})
 
     now = datetime.now(timezone.utc)
+    cutoff = None
     if period == "1h":
         cutoff = now - timedelta(hours=1)
     elif period == "1d":
         cutoff = now - timedelta(days=1)
-    else:
-        cutoff = None
 
-    data: List[dict] = []
-    unit = ""
+    data, unit = [], ""
     for p in dq:
         try:
             pts = datetime.fromisoformat(p["ts"])
@@ -161,6 +159,7 @@ def get_history(
         unit = p.get("unit", unit)
 
     return JSONResponse({"key": key, "unit": unit, "data": data})
+
 
 @app.get("/topics")
 def topics():
