@@ -13,6 +13,8 @@ const conn = document.getElementById('conn');
 const store = new Map(); // key -> latest sensor object
 let ws;                  // WebSocket instance
 let reconnectTimer = null;
+let draggedTile = null;
+let allowAutoSort = true;
 
 // ---------------------------------------------------------------------------
 // Utility helpers
@@ -56,6 +58,7 @@ function ensureTile(o) {
     // Fade-in animation
     requestAnimationFrame(() => el.classList.remove('opacity-0'));
   }
+  el.setAttribute('draggable', 'true');
   return el;
 }
 
@@ -148,8 +151,86 @@ function sortTiles() {
   tiles.forEach((t) => grid.appendChild(t));
 }
 
-// Resort every 30s just to keep things tidy
-setInterval(sortTiles, 30000);
+function getClosestDropTarget(x, y) {
+  const candidates = Array.from(grid.querySelectorAll('.tile:not(.dragging)'));
+  if (!candidates.length) return null;
+
+  let closest = null;
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const tile of candidates) {
+    const rect = tile.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    const distance = Math.hypot(dx, dy);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = tile;
+    }
+  }
+
+  return closest;
+}
+
+grid.addEventListener('dragstart', (event) => {
+  const tile = event.target.closest('.tile');
+  if (!tile) return;
+
+  draggedTile = tile;
+  allowAutoSort = false;
+  tile.classList.add('dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  // Firefox requires dataTransfer data to be set.
+  event.dataTransfer.setData('text/plain', tile.dataset.k || '');
+});
+
+grid.addEventListener('dragend', () => {
+  if (!draggedTile) return;
+  draggedTile.classList.remove('dragging');
+  draggedTile = null;
+});
+
+grid.addEventListener('dragover', (event) => {
+  if (!draggedTile) return;
+  event.preventDefault();
+
+  const dropTarget = getClosestDropTarget(event.clientX, event.clientY);
+  let referenceNode = null;
+
+  if (dropTarget && dropTarget !== draggedTile) {
+    const rect = dropTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const diffX = event.clientX - centerX;
+    const diffY = event.clientY - centerY;
+    const placeAfter = Math.abs(diffX) > Math.abs(diffY)
+      ? diffX > 0
+      : diffY > 0;
+
+    referenceNode = placeAfter ? dropTarget.nextElementSibling : dropTarget;
+  }
+
+  if (referenceNode === draggedTile) {
+    return;
+  }
+
+  grid.insertBefore(draggedTile, referenceNode);
+});
+
+grid.addEventListener('drop', (event) => {
+  if (draggedTile) {
+    event.preventDefault();
+  }
+});
+
+// Resort every 30s just to keep things tidy unless the user rearranged tiles
+setInterval(() => {
+  if (allowAutoSort) {
+    sortTiles();
+  }
+}, 30000);
 
 // ---------------------------------------------------------------------------
 // Start
