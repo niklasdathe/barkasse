@@ -1,84 +1,62 @@
 html,body { margin:0; height:100%; font-family:system-ui,Segoe UI,Arial,sans-serif; }
-#bg {
-  position:fixed; inset:0;
-  background: url('/static/assets/background.png') center/cover no-repeat;
-  filter: contrast(1.05) saturate(1.05);
-}
-#hud {
-  position:relative; z-index:2;
-  display:flex; flex-direction:column; height:100%;
-  background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25));
-}
-header {
-  display:flex; justify-content:space-between; align-items:center;
-  gap: 12px;
-  padding:12px 16px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);
-}
-header .right { display:flex; gap:14px; align-items:center; }
-#conn { opacity:.9; }
+#bg { position:fixed; inset:0; background:url('/static/assets/background.png') center/cover no-repeat; filter:contrast(1.05) saturate(1.05); }
+#hud { position:relative; z-index:2; display:flex; flex-direction:column; height:100%; background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25)); }
 
-.periods { display:flex; gap:6px; background:rgba(255,255,255,.15); padding:4px; border-radius:10px; }
-.periods button {
-  border:0; border-radius:8px; padding:6px 10px; background:rgba(255,255,255,.25); color:#fff; cursor:pointer;
-}
-.periods button.active { background:#fff; color:#000; }
-
-.chart-section {
-  position:relative;
-  margin: 0 12px 8px; padding:8px; border-radius:16px;
-  background: rgba(255,255,255,.85);
-  box-shadow: 0 6px 14px rgba(0,0,0,.12);
-  min-height: 280px;
-  display:flex; flex-direction:column; gap:6px;
-}
-#chart { width:100%; height:260px; display:block; }
-#chart-hint { position:absolute; inset:auto 12px 12px auto; opacity:.7; font-size:12px; }
-#chart-title { position:absolute; left:18px; top:10px; font-weight:600; opacity:.9; }
+header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6); }
 
 main#grid {
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap:12px;
-  padding:12px;
+  padding:100px 12px 12px;   /* 100px from top edge */
 }
+
 .tile {
   position:relative;
-  background: rgba(255,255,255,.88);
+  background:rgba(255,255,255,.88);
   border-radius:16px; padding:12px 14px;
-  box-shadow: 0 6px 14px rgba(0,0,0,.15);
-  cursor: grab;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity .3s;
+  box-shadow:0 6px 14px rgba(0,0,0,.15);
+  cursor:grab;
+  transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
 }
 .tile h3 { margin:0 0 4px 0; font-size:16px; }
 .tile .meta { color:#444; font-size:12px; opacity:.8; }
 .tile .value { font-size:32px; font-weight:700; margin-top:6px; }
 .tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
-.tile.dragging {
-  opacity: .9;
-  cursor: grabbing;
-  box-shadow: 0 10px 22px rgba(0,0,0,.18);
-  transform: scale(1.02);
-}
-.tile .dot {
-  position:absolute; right:10px; top:10px; width:10px; height:10px; border-radius:50%;
-  box-shadow: 0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
-}
+.tile.dragging { opacity:.9; cursor:grabbing; box-shadow:0 10px 22px rgba(0,0,0,.18); transform:scale(1.02); }
+.tile .dot { position:absolute; right:10px; top:10px; width:10px; height:10px; border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25); }
 
-.opacity-0 { opacity: 0; transform: scale(0.95); transition: opacity .5s, transform .5s; }
+.opacity-0 { opacity:0; transform:scale(0.95); transition:opacity .5s, transform .5s; }
+
+.chart-section {
+  position:relative;
+  margin: 8px 12px 8px;
+  padding:8px;
+  border-radius:16px;
+  background:rgba(255,255,255,.85);
+  box-shadow:0 6px 14px rgba(0,0,0,.12);
+  min-height:280px;
+  display:flex; flex-direction:column; gap:6px;
+}
+#chart { width:100%; height:260px; display:block; }
+#chart-hint { position:absolute; right:12px; bottom:10px; opacity:.7; font-size:12px; }
+#chart-title { position:absolute; left:18px; top:10px; font-weight:600; opacity:.9; }
+.chart-over { outline:2px dashed #4a90e2; border-radius:14px; }
+
+.periods {
+  display:flex; gap:8px; justify-content:flex-end;
+  margin: 0 12px 12px; padding:6px; background:rgba(255,255,255,.85); border-radius:12px;
+  box-shadow:0 6px 14px rgba(0,0,0,.12);
+}
+.periods button { border:0; border-radius:8px; padding:6px 12px; background:rgba(0,0,0,.08); cursor:pointer; }
+.periods button.active { background:#000; color:#fff; }
 
 .trash {
   position:fixed; bottom:18px; right:18px;
-  background: rgba(255,60,60,.95); color:#fff;
-  padding:12px 14px; border-radius:14px; box-shadow: 0 8px 18px rgba(0,0,0,.25);
-  transform: translateY(120%); transition: transform .2s ease;
-  pointer-events:none; user-select:none;   /* <- default: not droppable */
+  background:rgba(255,60,60,.95); color:#fff;
+  padding:12px 14px; border-radius:14px; box-shadow:0 8px 18px rgba(0,0,0,.25);
+  transform:translateY(120%); transition:transform .2s ease;
+  pointer-events:none; user-select:none;
 }
-.trash.show {
-  transform: translateY(0);
-  pointer-events:auto;                    /* <- now droppable when visible */
-}
-.trash.over { outline: 2px dashed #fff; }
-
-.chart-section { margin: 8px 12px 12px; }
-
-.chart-over { outline: 2px dashed #4a90e2; border-radius:14px; }
+.trash.show { transform:translateY(0); pointer-events:auto; }
+.trash.over { outline:2px dashed #fff; }
