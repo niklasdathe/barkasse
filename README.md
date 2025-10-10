@@ -60,3 +60,9 @@ sudo systemctl enable --now auto-git-update.service barkasse-ui.service chromium
 
 ## Extend
 Add any new sensor/cluster by publishing to the topic contract. No UI edits required.
+
+## Maintenance
+
+- Check backend: systemctl status barkasse-ui.service
+- Check kiosk: systemctl status chromium-kiosk.service
+- Update manually: git pull && sudo systemctl restart barkasse-ui chromium-kiosk
