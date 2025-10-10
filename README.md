@@ -1,27 +1,62 @@
 # Barkasse Hub (PoE + MQTT)
 
-A tiny, incredibly easy-to-extend sensor hub for the Barkasse project.
+A tiny, easy-to-extend sensor hub for the Barkasse project.
 
 ## Core Ideas
 - Sensor nodes (ESP32/Arduino) publish JSON over MQTT via Ethernet/PoE.
-- Central hub (Raspberry Pi CM5) runs Mosquitto and a small FastAPI app.
-- The touch UI is a web page with your background image; new sensors appear automatically.
+- A Raspberry Pi acts as a central hub with Mosquitto and a FastAPI + WebSocket UI.
+- The UI auto-discovers new sensors and displays them live on a 10-inch touch panel.
 
-## Topics & Schema
-- `barkasse/<node>/<cluster>/<sensor>`
-- JSON: `{"node","cluster","sensor","value","unit","ts"}`
-- Cluster summary (optional): `.../<cluster>/state` with `{"sensors": { ... }}`
+## MQTT Topics & JSON Schema
+- Topic: `barkasse/<node>/<cluster>/<sensor>`
+- Payload:
+  ```json
+  {
+  "node": "esp32p4-01",
+  "cluster": "weather",
+  "sensor": "temperature",
+  "value": 22.4,
+  "unit": "°C",
+  "ts": "2025-10-10T12:00:00Z"
+  }
+  ```
+## Directory Overview
 
-## Folders
-- `esp32p4-weather-mock` – Arduino demo firmware
-- `pi/docker-compose.yml` – Mosquitto broker
-- `pi/app` – FastAPI + WebSocket + UI (static)
+| Folder                  | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `esp32p4-weather-mock`  | ESP32-P4 demo firmware publishing MQTT weather data    |
+| `pi/docker-compose.yml` | Mosquitto MQTT broker                                  |
+| `pi/app/`               | FastAPI backend with WebSocket + static touchscreen UI |
+| `systemd/`              | Auto-update, backend, and kiosk startup services       |
 
-## Getting Started
-1. Bring up Mosquitto (`docker compose up -d` in `pi/`).
-2. Start UI (`uvicorn main:app ...`).
-3. Flash the ESP32-P4 with your MQTT credentials.
-4. Open the UI on the Pi’s touchscreen; tiles will populate live.
+
+## Setup on Raspberry Pi
+
+### 1. Setup Mosquitto
+```bash
+cd pi
+docker compose up -d
+```
+
+### 2. Setup Python environment
+```bash
+cd app
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Enable services
+```bash
+sudo cp systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now auto-git-update.service barkasse-ui.service chromium-kiosk.service
+```
+
+### Kiosk Mode
+
+- Chromium launches automatically in fullscreen Wayland mode.  
+- The UI is served at http://localhost:8080.  
 
 ## Extend
 Add any new sensor/cluster by publishing to the topic contract. No UI edits required.
