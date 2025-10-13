@@ -83,7 +83,7 @@ class GraphTile {
         </div>
       </div>
       <div class="graph-body" aria-label="History chart drop target">
-        <canvas class="chart" width="1200" height="260"></canvas>
+        <canvas class="chart"></canvas>
         <div class="chart-hint">${DEFAULT_CHART_HINT}</div>
       </div>
     `;
@@ -103,13 +103,43 @@ class GraphTile {
 
     this.syncButtons();
     this.reset();
+
+    /* === NEW: make canvas pixel size match the fixed tile size (crisp) === */
+    this.resizeObserver = new ResizeObserver(() => this.resizeCanvasToTile());
+    this.resizeObserver.observe(this.el);
+
     if (this.key) this.draw();
   }
 
   destroy(){
+    if (this.resizeObserver) this.resizeObserver.disconnect();
     this.el.removeEventListener('dragstart', onTileDragStart);
     this.el.removeEventListener('dragend', onTileDragEnd);
     this.el.remove();
+  }
+
+  /* === NEW === */
+  resizeCanvasToTile(){
+    const body = this.el.querySelector('.graph-body');
+    if (!body) return;
+    const cssW = Math.max(1, Math.floor(body.clientWidth));
+    const cssH = Math.max(1, Math.floor(body.clientHeight - (this.hint?.offsetHeight || 0)));
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+
+    // set internal pixel buffer size to avoid blur
+    this.canvas.width  = cssW * dpr;
+    this.canvas.height = cssH * dpr;
+
+    // keep CSS size logical
+    this.canvas.style.width = cssW + 'px';
+    this.canvas.style.height = cssH + 'px';
+
+    // scale the context so drawing code can stay in CSS pixels
+    const ctx = this.canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // redraw if data present
+    if (this.key) this.draw();
   }
 
   syncButtons(){
@@ -125,16 +155,8 @@ class GraphTile {
     this.syncButtons();
     if (this.key) this.draw();
   }
-
-  onDragOver(e){
-    if(!draggedTile || !draggedTile.dataset.k) return;
-    e.preventDefault();
-    this.el.classList.add('chart-over');
-  }
-  onDragLeave(e){
-    const rel = e.relatedTarget;
-    if (!rel || !this.el.contains(rel)) this.el.classList.remove('chart-over');
-  }
+  onDragOver(e){ if(!draggedTile || !draggedTile.dataset.k) return; e.preventDefault(); this.el.classList.add('chart-over'); }
+  onDragLeave(e){ const rel = e.relatedTarget; if (!rel || !this.el.contains(rel)) this.el.classList.remove('chart-over'); }
   async onDrop(e){
     if(!draggedTile || !draggedTile.dataset.k) return;
     e.preventDefault();
@@ -159,19 +181,15 @@ class GraphTile {
     ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
 
     let unit, data;
-    try {
-      ({unit, data} = await fetchHistory(this.key, this.period));
-    } catch (err) {
-      this.hint.textContent = 'Failed to load data';
-      throw err;
-    }
-    if (!Array.isArray(data) || data.length === 0){
-      this.hint.textContent = 'No data';
-      return;
-    }
+    try { ({unit, data} = await fetchHistory(this.key, this.period)); }
+    catch { this.hint.textContent = 'Failed to load data'; return; }
+    if (!Array.isArray(data) || data.length === 0){ this.hint.textContent = 'No data'; return; }
     this.hint.textContent = '';
 
-    const w=this.canvas.width, h=this.canvas.height;
+    // use CSS pixel size (post-transform) by reading the styled size
+    const w = parseFloat(this.canvas.style.width)  || this.canvas.width;
+    const h = parseFloat(this.canvas.style.height) || this.canvas.height;
+
     const padL=50,padR=12,padT=12,padB=24;
     const plotW=w-padL-padR, plotH=h-padT-padB;
 
@@ -211,6 +229,7 @@ class GraphTile {
     ctx.fillText(`${last.value.toFixed(2)} ${unit||''}`, lx+6, ly-6);
   }
 }
+
 
 const graphTiles = new Set();  // hold all GraphTile instances
 
