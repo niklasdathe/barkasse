@@ -1,40 +1,32 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Barkasse Hub</title>
-  <link rel="stylesheet" href="/static/styles.css"/>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Barkasse Hub</title>
+<link rel="stylesheet" href="/static/styles.css"/>
 </head>
 <body>
-  <div id="bg"></div>
-  <div id="hud">
-    <header>
-      <h1>SENSOR-HUB</h1>
-      <span id="conn">connecting…</span>
-    </header>
+<div id="bg"></div>
+<div id="hud">
+<header>
+<h1>SENSOR-HUB</h1>
+<span id="conn">connecting…</span>
+</header>
 
-    <!-- Tiles (100px top padding handled in CSS) -->
-    <main id="grid"></main>
 
-    <!-- Chart below tiles -->
-    <section id="chart-section" class="chart-section" aria-label="History chart drop target">
-      <canvas id="chart" width="1200" height="260"></canvas>
-      <div id="chart-hint">Drag a tile here to view its history</div>
-      <div id="chart-title">—</div>
-    </section>
+<!-- Tiles (100px top padding handled in CSS) -->
+<main id="grid"></main>
 
-    <!-- Period selector BELOW the chart -->
-    <div id="periods" class="periods" role="group" aria-label="Chart period">
-      <button data-p="1h" class="active">1h</button>
-      <button data-p="1d">1d</button>
-      <button data-p="max">max</button>
-    </div>
 
-    <!-- Trashcan -->
-    <div id="trash" class="trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
-  </div>
+<!-- Floating drop-zones (bottom-right) -->
+<div class="float-zones">
+<div id="create-graph" class="float-btn" aria-label="Drop a tile to create a chart">📈 Create graph</div>
+<div id="trash" class="float-btn danger" aria-label="Drop here to remove tile">🗑️ Delete tile</div>
+</div>
+</div>
 
-  <script src="/static/app.js"></script>
+
+<script src="/static/app.js"></script>
 </body>
 </html>
