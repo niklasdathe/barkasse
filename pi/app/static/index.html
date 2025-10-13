@@ -16,24 +16,28 @@
     </header>
 
     <!-- Tiles (100px top padding handled in CSS) -->
-    <main id="grid"></main>
+    <main id="grid">
+      <div id="graph-tile" class="tile graph-tile" data-graph="true" draggable="true">
+        <div class="graph-header">
+          <div id="chart-title">—</div>
+          <div id="periods" class="periods" role="group" aria-label="Chart period">
+            <button data-p="1h" class="active">1h</button>
+            <button data-p="1d">1d</button>
+            <button data-p="max">max</button>
+          </div>
+        </div>
+        <div class="graph-body" aria-label="History chart drop target">
+          <canvas id="chart" width="1200" height="260"></canvas>
+          <div id="chart-hint">Drag a tile here to view its history</div>
+        </div>
+      </div>
+    </main>
 
-    <!-- Chart below tiles -->
-    <section id="chart-section" class="chart-section" aria-label="History chart drop target">
-      <canvas id="chart" width="1200" height="260"></canvas>
-      <div id="chart-hint">Drag a tile here to view its history</div>
-      <div id="chart-title">—</div>
-    </section>
-
-    <!-- Period selector BELOW the chart -->
-    <div id="periods" class="periods" role="group" aria-label="Chart period">
-      <button data-p="1h" class="active">1h</button>
-      <button data-p="1d">1d</button>
-      <button data-p="max">max</button>
+    <!-- Tile action dropzones -->
+    <div class="utility-drops" role="group" aria-label="Tile actions">
+      <div id="trash" class="drop-target trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
+      <div id="graph-create" class="drop-target graph-create" aria-label="Drop a tile to create a graph">➕ Drop to create graph</div>
     </div>
-
-    <!-- Trashcan -->
-    <div id="trash" class="trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
   </div>
 
   <script src="/static/app.js"></script>

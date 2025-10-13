@@ -3,12 +3,15 @@
 
 const grid = document.getElementById('grid');
 const conn = document.getElementById('conn');
-const chartCanvas = document.getElementById('chart');
-const chartSection = document.getElementById('chart-section');
-const chartTitle = document.getElementById('chart-title');
-const chartHint  = document.getElementById('chart-hint');
+let graphTile = document.getElementById('graph-tile');
+let chartCanvas = graphTile ? graphTile.querySelector('#chart') : null;
+let chartTitle = graphTile ? graphTile.querySelector('#chart-title') : null;
+let chartHint  = graphTile ? graphTile.querySelector('#chart-hint') : null;
+let periodButtons = graphTile ? Array.from(graphTile.querySelectorAll('#periods button')) : [];
 
-const periodButtons = Array.from(document.querySelectorAll('#periods button'));
+const trash = document.getElementById('trash');
+const graphCreate = document.getElementById('graph-create');
+const DEFAULT_CHART_HINT = 'Drag a tile here to view its history';
 
 const store = new Map();                 // key -> last payload
 const lastSeen = new Map();              // key -> Date.now() of last WS message
@@ -85,6 +88,7 @@ function ensureTile(o){
   return el;
 }
 function paintDot(el){
+  if (!el.dataset.k) return;
   const k = el.dataset.k;
   const m = ageMinutesFromSeen(k);
   let color = '#bbb';
@@ -103,7 +107,120 @@ function render(o){
   el.querySelector('.ts').textContent   = o.ts || '';
   paintDot(el);
 }
-setInterval(()=>{ document.querySelectorAll('.tile').forEach(paintDot); }, 30000);
+setInterval(()=>{ document.querySelectorAll('.tile[data-k]').forEach(paintDot); }, 30000);
+
+/* === graph tile === */
+function syncPeriodButtons(){
+  periodButtons.forEach(btn=>{
+    if(btn.dataset.p === currentChartPeriod) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+}
+
+function handlePeriodClick(e){
+  e.preventDefault();
+  const btn = e.currentTarget;
+  currentChartPeriod = btn.dataset.p;
+  syncPeriodButtons();
+  if (currentChartKey) drawChartFor(currentChartKey, currentChartPeriod);
+}
+
+function resetGraphDisplay(){
+  if (!chartCanvas || !chartTitle || !chartHint) return;
+  chartTitle.textContent = '—';
+  chartHint.textContent = DEFAULT_CHART_HINT;
+  const ctx = chartCanvas.getContext('2d');
+  ctx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
+}
+
+function onGraphTileDragOver(e){
+  if (!graphTile || !draggedTile || draggedTile === graphTile) return;
+  if (!draggedTile.dataset.k) return;
+  e.preventDefault();
+  graphTile.classList.add('chart-over');
+}
+
+function onGraphTileDragLeave(e){
+  if (!graphTile) return;
+  const rel = e.relatedTarget;
+  if (!rel || !graphTile.contains(rel)) graphTile.classList.remove('chart-over');
+}
+
+async function onGraphTileDrop(e){
+  if (!graphTile || !draggedTile || draggedTile === graphTile) return;
+  if (!draggedTile.dataset.k) return;
+  e.preventDefault();
+  graphTile.classList.remove('chart-over');
+  await drawChartFor(draggedTile.dataset.k, currentChartPeriod);
+}
+
+function setupGraphTile(tile){
+  graphTile = tile;
+  chartCanvas = tile.querySelector('#chart');
+  chartTitle = tile.querySelector('#chart-title');
+  chartHint = tile.querySelector('#chart-hint');
+  periodButtons = Array.from(tile.querySelectorAll('#periods button'));
+  tile.dataset.graph = 'true';
+  tile.setAttribute('draggable','true');
+  tile.addEventListener('dragstart', onTileDragStart);
+  tile.addEventListener('dragend', onTileDragEnd);
+  tile.addEventListener('dragover', onGraphTileDragOver);
+  tile.addEventListener('dragleave', onGraphTileDragLeave);
+  tile.addEventListener('drop', onGraphTileDrop);
+  periodButtons.forEach(btn=>btn.addEventListener('click', handlePeriodClick));
+  syncPeriodButtons();
+  if (!currentChartKey) resetGraphDisplay();
+}
+
+function destroyGraphTile(){
+  if (!graphTile) return;
+  graphTile.removeEventListener('dragstart', onTileDragStart);
+  graphTile.removeEventListener('dragend', onTileDragEnd);
+  graphTile.removeEventListener('dragover', onGraphTileDragOver);
+  graphTile.removeEventListener('dragleave', onGraphTileDragLeave);
+  graphTile.removeEventListener('drop', onGraphTileDrop);
+  graphTile.remove();
+  graphTile = null;
+  chartCanvas = null;
+  chartTitle = null;
+  chartHint = null;
+  periodButtons = [];
+  currentChartKey = null;
+}
+
+function createGraphTile(){
+  if (graphTile) return graphTile;
+  const tile = document.createElement('div');
+  tile.id = 'graph-tile';
+  tile.className = 'tile graph-tile';
+  tile.innerHTML = `
+        <div class="graph-header">
+          <div id="chart-title">—</div>
+          <div id="periods" class="periods" role="group" aria-label="Chart period">
+            <button data-p="1h">1h</button>
+            <button data-p="1d">1d</button>
+            <button data-p="max">max</button>
+          </div>
+        </div>
+        <div class="graph-body" aria-label="History chart drop target">
+          <canvas id="chart" width="1200" height="260"></canvas>
+          <div id="chart-hint">${DEFAULT_CHART_HINT}</div>
+        </div>`;
+  grid.appendChild(tile);
+  setupGraphTile(tile);
+  return tile;
+}
+
+function showDropTargets(){
+  trash.classList.add('show');
+  graphCreate.classList.add('show');
+}
+
+function hideDropTargets(){
+  trash.classList.remove('show', 'over');
+  graphCreate.classList.remove('show', 'over');
+  if (graphTile) graphTile.classList.remove('chart-over');
+}
 
 /* === WS === */
 function connectWS(){
@@ -134,139 +251,74 @@ function scheduleReconnect(){ if (reconnectTimer) return; reconnectTimer=setTime
 function sortTiles(){ Array.from(grid.children).sort((a,b)=>a.dataset.k.localeCompare(b.dataset.k)).forEach(t=>grid.appendChild(t)); }
 setInterval(()=>{ if (allowAutoSort) sortTiles(); }, 30000);
 
-/* === drag: chart === */
-chartSection.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault(); });
-chartSection.addEventListener('drop', e=>{ e.preventDefault(); if(!draggedTile) return; drawChartFor(draggedTile.dataset.k, currentChartPeriod); });
-
-/* === drag: tiles / trash (unchanged layout-wise) === */
-let trash = document.getElementById('trash');
-function onTileDragStart(e){ draggedTile=e.currentTarget; allowAutoSort=false; draggedTile.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', draggedTile.dataset.k||''); trash.classList.add('show'); }
-function onTileDragEnd(){ if(!draggedTile) return; draggedTile.classList.remove('dragging'); draggedTile=null; trash.classList.remove('show'); }
+/* === drag: tiles / dropzones === */
+function onTileDragStart(e){
+  draggedTile=e.currentTarget;
+  allowAutoSort=false;
+  draggedTile.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain', draggedTile.dataset.k||'');
+  showDropTargets();
+}
+function onTileDragEnd(){
+  if(!draggedTile) return;
+  draggedTile.classList.remove('dragging');
+  draggedTile=null;
+  hideDropTargets();
+}
 grid.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault();
   const others=[...grid.querySelectorAll('.tile:not(.dragging)')]; if(!others.length) return;
   let closest=null, mind=Infinity;
   for(const t of others){ const r=t.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; const d=Math.hypot(e.clientX-cx,e.clientY-cy); if(d<mind){mind=d;closest=t;} }
   if(closest && closest!==draggedTile){ grid.insertBefore(draggedTile, closest); }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 });
 trash.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault(); trash.classList.add('over'); });
 trash.addEventListener('dragleave', ()=>trash.classList.remove('over'));
 trash.addEventListener('drop', e=>{
-
-
-
-  e.preventDefault(); trash.classList.remove('over');
+  e.preventDefault();
+  trash.classList.remove('over');
   if(!draggedTile) return;
-  const k = draggedTile.dataset.k;
-  mutedUntilNextUpdate.add(k);
-  if (currentChartKey === k){
-    currentChartKey=null; chartTitle.textContent='—'; chartHint.textContent='Drag a tile here to view its history';
-
-
-    chartCanvas.getContext('2d').clearRect(0,0,chartCanvas.width,chartCanvas.height);
+  const tile = draggedTile;
+  try {
+    if (tile.dataset.graph === 'true'){
+      tile.classList.remove('dragging');
+      destroyGraphTile();
+    } else if (tile.dataset.k){
+      const k = tile.dataset.k;
+      mutedUntilNextUpdate.add(k);
+      if (currentChartKey === k){
+        currentChartKey=null;
+        resetGraphDisplay();
+      }
+      tile.style.display='none';
+      tile.classList.remove('dragging');
+    }
+  } finally {
+    draggedTile=null;
+    hideDropTargets();
   }
-  draggedTile.style.display='none'; draggedTile.classList.remove('dragging'); draggedTile=null; trash.classList.remove('show');
-
-
-
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* === periods + chart (NO FALLBACKS) === */
-periodButtons.forEach(btn=>{
-  btn.addEventListener('click', async ()=>{
-    periodButtons.forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentChartPeriod = btn.dataset.p;
-    if (currentChartKey) await drawChartFor(currentChartKey, currentChartPeriod);
-  });
+graphCreate.addEventListener('dragover', e=>{
+  if(!draggedTile || !draggedTile.dataset.k) return;
+  e.preventDefault();
+  graphCreate.classList.add('over');
+});
+graphCreate.addEventListener('dragleave', ()=>graphCreate.classList.remove('over'));
+graphCreate.addEventListener('drop', async e=>{
+  if(!draggedTile || !draggedTile.dataset.k) return;
+  e.preventDefault();
+  graphCreate.classList.remove('over');
+  const key = draggedTile.dataset.k;
+  const tile = draggedTile;
+  try {
+    if (!graphTile) createGraphTile();
+    syncPeriodButtons();
+    await drawChartFor(key, currentChartPeriod);
+  } finally {
+    tile.classList.remove('dragging');
+    draggedTile=null;
+    hideDropTargets();
+  }
 });
 
 async function fetchHistory(k, period){
@@ -276,36 +328,27 @@ async function fetchHistory(k, period){
 }
 
 async function drawChartFor(k, period){
+  if (!graphTile || !chartCanvas) return;
   currentChartKey = k;
-  chartTitle.textContent = `${k} (${period})`;
+  if (chartTitle) chartTitle.textContent = `${k} (${period})`;
+  syncPeriodButtons();
 
   const ctx = chartCanvas.getContext('2d');
   ctx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
 
-  let {unit, data} = await fetchHistory(k, period);
+  let unit, data;
+  try {
+    ({unit, data} = await fetchHistory(k, period));
+  } catch (err) {
+    if (chartHint) chartHint.textContent = 'Failed to load data';
+    throw err;
+  }
   if (!Array.isArray(data) || data.length === 0){
-    chartHint.textContent = 'No data';
+    if (chartHint) chartHint.textContent = 'No data';
     return;
-
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  chartHint.textContent = '';
+  if (chartHint) chartHint.textContent = '';
 
   const w=chartCanvas.width, h=chartCanvas.height;
   const padL=50,padR=12,padT=12,padB=24;
@@ -328,8 +371,6 @@ async function drawChartFor(k, period){
     const y=h-padB-(plotH*i/4);
     ctx.fillText(yv.toFixed(2),6,y+4);
     ctx.globalAlpha=.12; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke(); ctx.globalAlpha=1;
-
-
   }
 
   // line
@@ -350,4 +391,5 @@ async function drawChartFor(k, period){
 }
 
 /* === start === */
+if (graphTile) setupGraphTile(graphTile);
 connectWS();
