@@ -15,23 +15,24 @@
 
     </header>
 
-    <!-- Tiles (100px top padding handled in CSS) -->
-    <main id="grid">
-      <div id="graph-tile" class="tile graph-tile" data-graph="true" draggable="true">
-        <div class="graph-header">
-          <div id="chart-title">—</div>
-          <div id="periods" class="periods" role="group" aria-label="Chart period">
-            <button data-p="1h" class="active">1h</button>
-            <button data-p="1d">1d</button>
-            <button data-p="max">max</button>
-          </div>
-        </div>
-        <div class="graph-body" aria-label="History chart drop target">
-          <canvas id="chart" width="1200" height="260"></canvas>
-          <div id="chart-hint">Drag a tile here to view its history</div>
-        </div>
+<main id="grid">
+  <!-- optional placeholder to show a graph spot on initial load -->
+  <div class="tile graph-tile" data-graph="true" data-bootstrap="true">
+    <div class="graph-header">
+      <div class="chart-title">—</div>
+      <div class="periods" role="group" aria-label="Chart period">
+        <button data-p="1h" class="active">1h</button>
+        <button data-p="1d">1d</button>
+        <button data-p="max">max</button>
       </div>
-    </main>
+    </div>
+    <div class="graph-body" aria-label="History chart drop target">
+      <canvas class="chart" width="1200" height="260"></canvas>
+      <div class="chart-hint">Drag a tile here to view its history</div>
+    </div>
+  </div>
+</main>
+
 
     <!-- Tile action dropzones -->
     <div class="utility-drops" role="group" aria-label="Tile actions">
