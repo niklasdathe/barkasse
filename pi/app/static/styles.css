@@ -4,12 +4,21 @@ html,body { margin:0; height:100%; font-family:system-ui,Segoe UI,Arial,sans-ser
 
 header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6); }
 
+/* Responsive grid for sensors */
 main#grid {
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap:12px;
-  padding:100px 12px 12px;   /* 100px from top edge */
+  padding:100px 12px 12px;
 }
+
+/* Graphs: always 50vw. Grid ignores width, so we make each graph span enough tracks. */
+@media (min-width: 640px) {
+  /* Create many narrow tracks, then make graphs span half the viewport */
+  main#grid { grid-template-columns: repeat(12, 1fr); }
+  .tile.graph-tile { grid-column: span 6; } /* 6/12 = 50% */
+}
+
 
 .tile {
   position:relative;
