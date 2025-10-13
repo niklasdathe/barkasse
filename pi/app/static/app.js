@@ -3,9 +3,11 @@
 
 const grid = document.getElementById('grid');
 const conn = document.getElementById('conn');
-const initialGraphTiles = Array.from(document.querySelectorAll('.graph-tile[data-graph="true"]'));
-const graphStates = new Map();
-const DEFAULT_CHART_PERIOD = '1h';
+let graphTile = document.getElementById('graph-tile');
+let chartCanvas = graphTile ? graphTile.querySelector('#chart') : null;
+let chartTitle = graphTile ? graphTile.querySelector('#chart-title') : null;
+let chartHint  = graphTile ? graphTile.querySelector('#chart-hint') : null;
+let periodButtons = graphTile ? Array.from(graphTile.querySelectorAll('#periods button')) : [];
 
 const trash = document.getElementById('trash');
 const graphCreate = document.getElementById('graph-create');
@@ -18,6 +20,8 @@ const mutedUntilNextUpdate = new Set();
 let ws, reconnectTimer = null;
 let draggedTile = null;
 let allowAutoSort = true;
+let currentChartKey = null;
+let currentChartPeriod = '1h';
 
 /* === helpers === */
 function key(o){ return `${o.node}/${o.cluster}/${o.sensor || 'state'}`; }
@@ -106,113 +110,105 @@ function render(o){
 setInterval(()=>{ document.querySelectorAll('.tile[data-k]').forEach(paintDot); }, 30000);
 
 /* === graph tile === */
-function syncPeriodButtons(state){
-  state.periodButtons.forEach(btn=>{
-    if(btn.dataset.p === state.currentPeriod) btn.classList.add('active');
+function syncPeriodButtons(){
+  periodButtons.forEach(btn=>{
+    if(btn.dataset.p === currentChartPeriod) btn.classList.add('active');
     else btn.classList.remove('active');
   });
 }
 
-function handlePeriodClick(e, state){
+function handlePeriodClick(e){
   e.preventDefault();
   const btn = e.currentTarget;
-  state.currentPeriod = btn.dataset.p;
-  syncPeriodButtons(state);
-  if (state.currentKey) drawChartFor(state, state.currentKey, state.currentPeriod).catch(err=>console.error('Chart period error', err));
+  currentChartPeriod = btn.dataset.p;
+  syncPeriodButtons();
+  if (currentChartKey) drawChartFor(currentChartKey, currentChartPeriod);
 }
 
-function resetGraphDisplay(state){
-  state.currentKey = null;
-  if (state.title) state.title.textContent = '—';
-  if (state.hint) state.hint.textContent = DEFAULT_CHART_HINT;
-  if (state.canvas){
-    const ctx = state.canvas.getContext('2d');
-    ctx.clearRect(0,0,state.canvas.width,state.canvas.height);
-  }
+function resetGraphDisplay(){
+  if (!chartCanvas || !chartTitle || !chartHint) return;
+  chartTitle.textContent = '—';
+  chartHint.textContent = DEFAULT_CHART_HINT;
+  const ctx = chartCanvas.getContext('2d');
+  ctx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
 }
 
 function onGraphTileDragOver(e){
-  if (!draggedTile || draggedTile === e.currentTarget) return;
+  if (!graphTile || !draggedTile || draggedTile === graphTile) return;
   if (!draggedTile.dataset.k) return;
   e.preventDefault();
-  e.currentTarget.classList.add('chart-over');
+  graphTile.classList.add('chart-over');
 }
 
 function onGraphTileDragLeave(e){
-  const tile = e.currentTarget;
+  if (!graphTile) return;
   const rel = e.relatedTarget;
-  if (!rel || !tile.contains(rel)) tile.classList.remove('chart-over');
+  if (!rel || !graphTile.contains(rel)) graphTile.classList.remove('chart-over');
 }
 
-async function onGraphTileDrop(e, state){
-  if (!draggedTile || draggedTile === e.currentTarget) return;
+async function onGraphTileDrop(e){
+  if (!graphTile || !draggedTile || draggedTile === graphTile) return;
   if (!draggedTile.dataset.k) return;
   e.preventDefault();
-  e.currentTarget.classList.remove('chart-over');
-  try {
-    await drawChartFor(state, draggedTile.dataset.k, state.currentPeriod);
-  } catch (err) {
-    console.error('Chart draw error', err);
-  }
+  graphTile.classList.remove('chart-over');
+  await drawChartFor(draggedTile.dataset.k, currentChartPeriod);
 }
 
 function setupGraphTile(tile){
-  const state = {
-    tile,
-    canvas: tile.querySelector('.chart'),
-    title: tile.querySelector('.chart-title'),
-    hint: tile.querySelector('.chart-hint'),
-    periodButtons: Array.from(tile.querySelectorAll('.periods button')),
-    currentKey: null,
-    currentPeriod: DEFAULT_CHART_PERIOD,
-  };
-  state.handlePeriodClick = (e)=>handlePeriodClick(e, state);
-  state.handleDrop = (e)=>onGraphTileDrop(e, state);
+  graphTile = tile;
+  chartCanvas = tile.querySelector('#chart');
+  chartTitle = tile.querySelector('#chart-title');
+  chartHint = tile.querySelector('#chart-hint');
+  periodButtons = Array.from(tile.querySelectorAll('#periods button'));
   tile.dataset.graph = 'true';
   tile.setAttribute('draggable','true');
   tile.addEventListener('dragstart', onTileDragStart);
   tile.addEventListener('dragend', onTileDragEnd);
   tile.addEventListener('dragover', onGraphTileDragOver);
   tile.addEventListener('dragleave', onGraphTileDragLeave);
-  tile.addEventListener('drop', state.handleDrop);
-  state.periodButtons.forEach(btn=>btn.addEventListener('click', state.handlePeriodClick));
-  graphStates.set(tile, state);
-  syncPeriodButtons(state);
-  resetGraphDisplay(state);
-  return state;
+  tile.addEventListener('drop', onGraphTileDrop);
+  periodButtons.forEach(btn=>btn.addEventListener('click', handlePeriodClick));
+  syncPeriodButtons();
+  if (!currentChartKey) resetGraphDisplay();
 }
 
-function destroyGraphTile(tile){
-  const state = graphStates.get(tile);
-  if (!state) return;
-  tile.removeEventListener('dragstart', onTileDragStart);
-  tile.removeEventListener('dragend', onTileDragEnd);
-  tile.removeEventListener('dragover', onGraphTileDragOver);
-  tile.removeEventListener('dragleave', onGraphTileDragLeave);
-  tile.removeEventListener('drop', state.handleDrop);
-  state.periodButtons.forEach(btn=>btn.removeEventListener('click', state.handlePeriodClick));
-  graphStates.delete(tile);
-  tile.remove();
+function destroyGraphTile(){
+  if (!graphTile) return;
+  graphTile.removeEventListener('dragstart', onTileDragStart);
+  graphTile.removeEventListener('dragend', onTileDragEnd);
+  graphTile.removeEventListener('dragover', onGraphTileDragOver);
+  graphTile.removeEventListener('dragleave', onGraphTileDragLeave);
+  graphTile.removeEventListener('drop', onGraphTileDrop);
+  graphTile.remove();
+  graphTile = null;
+  chartCanvas = null;
+  chartTitle = null;
+  chartHint = null;
+  periodButtons = [];
+  currentChartKey = null;
 }
 
 function createGraphTile(){
+  if (graphTile) return graphTile;
   const tile = document.createElement('div');
+  tile.id = 'graph-tile';
   tile.className = 'tile graph-tile';
   tile.innerHTML = `
         <div class="graph-header">
-          <div class="chart-title">—</div>
-          <div class="periods" role="group" aria-label="Chart period">
+          <div id="chart-title">—</div>
+          <div id="periods" class="periods" role="group" aria-label="Chart period">
             <button data-p="1h">1h</button>
             <button data-p="1d">1d</button>
             <button data-p="max">max</button>
           </div>
         </div>
         <div class="graph-body" aria-label="History chart drop target">
-          <canvas class="chart" width="1200" height="260"></canvas>
-          <div class="chart-hint">${DEFAULT_CHART_HINT}</div>
+          <canvas id="chart" width="1200" height="260"></canvas>
+          <div id="chart-hint">${DEFAULT_CHART_HINT}</div>
         </div>`;
   grid.appendChild(tile);
-  return setupGraphTile(tile);
+  setupGraphTile(tile);
+  return tile;
 }
 
 function showDropTargets(){
@@ -223,7 +219,7 @@ function showDropTargets(){
 function hideDropTargets(){
   trash.classList.remove('show', 'over');
   graphCreate.classList.remove('show', 'over');
-  graphStates.forEach(({tile})=>tile.classList.remove('chart-over'));
+  if (graphTile) graphTile.classList.remove('chart-over');
 }
 
 /* === WS === */
@@ -244,9 +240,7 @@ function connectWS(){
         const o = msg.data; const k = key(o);
         store.set(k,o); lastSeen.set(k, Date.now()); render(o);
         if (allowAutoSort) sortTiles();
-        graphStates.forEach(state=>{
-          if (state.currentKey === k) drawChartFor(state, state.currentKey, state.currentPeriod).catch(err=>console.error('Chart update error', err));
-        });
+        if (currentChartKey === k) drawChartFor(currentChartKey, currentChartPeriod);
       }
     }catch(e){ console.error('WS JSON error', e); }
   };
@@ -254,18 +248,7 @@ function connectWS(){
 function scheduleReconnect(){ if (reconnectTimer) return; reconnectTimer=setTimeout(()=>{reconnectTimer=null; connectWS();},4000); }
 
 /* === sorting === */
-function sortTiles(){
-  const tiles = Array.from(grid.children);
-  tiles.sort((a,b)=>{
-    const ag = a.dataset.graph === 'true';
-    const bg = b.dataset.graph === 'true';
-    if (ag && !bg) return 1;
-    if (!ag && bg) return -1;
-    const ak = a.dataset.k || '';
-    const bk = b.dataset.k || '';
-    return ak.localeCompare(bk);
-  }).forEach(t=>grid.appendChild(t));
-}
+function sortTiles(){ Array.from(grid.children).sort((a,b)=>a.dataset.k.localeCompare(b.dataset.k)).forEach(t=>grid.appendChild(t)); }
 setInterval(()=>{ if (allowAutoSort) sortTiles(); }, 30000);
 
 /* === drag: tiles / dropzones === */
@@ -299,13 +282,14 @@ trash.addEventListener('drop', e=>{
   try {
     if (tile.dataset.graph === 'true'){
       tile.classList.remove('dragging');
-      destroyGraphTile(tile);
+      destroyGraphTile();
     } else if (tile.dataset.k){
       const k = tile.dataset.k;
       mutedUntilNextUpdate.add(k);
-      graphStates.forEach(state=>{
-        if (state.currentKey === k) resetGraphDisplay(state);
-      });
+      if (currentChartKey === k){
+        currentChartKey=null;
+        resetGraphDisplay();
+      }
       tile.style.display='none';
       tile.classList.remove('dragging');
     }
@@ -327,12 +311,9 @@ graphCreate.addEventListener('drop', async e=>{
   const key = draggedTile.dataset.k;
   const tile = draggedTile;
   try {
-    const state = createGraphTile();
-    try {
-      await drawChartFor(state, key, state.currentPeriod);
-    } catch (err) {
-      console.error('Chart create error', err);
-    }
+    if (!graphTile) createGraphTile();
+    syncPeriodButtons();
+    await drawChartFor(key, currentChartPeriod);
   } finally {
     tile.classList.remove('dragging');
     draggedTile=null;
@@ -346,31 +327,30 @@ async function fetchHistory(k, period){
   return r.json();
 }
 
-async function drawChartFor(state, k, period){
-  if (!state || !state.canvas) return;
-  state.currentKey = k;
-  state.currentPeriod = period;
-  if (state.title) state.title.textContent = `${k} (${period})`;
-  syncPeriodButtons(state);
+async function drawChartFor(k, period){
+  if (!graphTile || !chartCanvas) return;
+  currentChartKey = k;
+  if (chartTitle) chartTitle.textContent = `${k} (${period})`;
+  syncPeriodButtons();
 
-  const ctx = state.canvas.getContext('2d');
-  ctx.clearRect(0,0,state.canvas.width,state.canvas.height);
+  const ctx = chartCanvas.getContext('2d');
+  ctx.clearRect(0,0,chartCanvas.width,chartCanvas.height);
 
   let unit, data;
   try {
     ({unit, data} = await fetchHistory(k, period));
   } catch (err) {
-    if (state.hint) state.hint.textContent = 'Failed to load data';
+    if (chartHint) chartHint.textContent = 'Failed to load data';
     throw err;
   }
   if (!Array.isArray(data) || data.length === 0){
-    if (state.hint) state.hint.textContent = 'No data';
+    if (chartHint) chartHint.textContent = 'No data';
     return;
   }
 
-  if (state.hint) state.hint.textContent = '';
+  if (chartHint) chartHint.textContent = '';
 
-  const w=state.canvas.width, h=state.canvas.height;
+  const w=chartCanvas.width, h=chartCanvas.height;
   const padL=50,padR=12,padT=12,padB=24;
   const plotW=w-padL-padR, plotH=h-padT-padB;
 
@@ -411,5 +391,5 @@ async function drawChartFor(state, k, period){
 }
 
 /* === start === */
-initialGraphTiles.forEach(setupGraphTile);
+if (graphTile) setupGraphTile(graphTile);
 connectWS();
