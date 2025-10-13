@@ -28,26 +28,33 @@ main#grid {
 
 .opacity-0 { opacity:0; transform:scale(0.95); transition:opacity .5s, transform .5s; }
 
-.chart-section {
-  position:relative;
-  margin: 8px 12px 8px;
-  padding:8px;
-  border-radius:16px;
-  background:rgba(255,255,255,.85);
-  box-shadow:0 6px 14px rgba(0,0,0,.12);
-  min-height:280px;
-  display:flex; flex-direction:column; gap:6px;
+.tile.graph-tile {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  min-height:320px;
 }
-#chart { width:100%; height:260px; display:block; }
-#chart-hint { position:absolute; right:12px; bottom:10px; opacity:.7; font-size:12px; }
-#chart-title { position:absolute; left:18px; top:10px; font-weight:600; opacity:.9; }
+.tile.graph-tile .graph-header {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+#chart-title { font-weight:600; opacity:.9; }
+.tile.graph-tile .graph-body {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+}
+#chart { width:100%; height:240px; display:block; }
+#chart-hint { align-self:flex-end; margin-top:8px; opacity:.7; font-size:12px; }
 .chart-over { outline:2px dashed #4a90e2; border-radius:14px; }
 
 .periods {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-  margin: 4px 12px 12px;
+  display:flex;
+  gap:6px;
+  margin:0;
 }
 .periods button {
   border: 0;
@@ -60,12 +67,24 @@ main#grid {
   background: #000;
   color: #fff;
 }
-.trash {
-  position:fixed; bottom:18px; right:18px;
-  background:rgba(255,60,60,.95); color:#fff;
-  padding:12px 14px; border-radius:14px; box-shadow:0 8px 18px rgba(0,0,0,.25);
-  transform:translateY(120%); transition:transform .2s ease;
-  pointer-events:none; user-select:none;
+.utility-drops {
+  position:fixed;
+  bottom:18px;
+  right:18px;
+  display:flex;
+  gap:12px;
 }
-.trash.show { transform:translateY(0); pointer-events:auto; }
-.trash.over { outline:2px dashed #fff; }
+.drop-target {
+  padding:12px 14px;
+  border-radius:14px;
+  box-shadow:0 8px 18px rgba(0,0,0,.25);
+  transform:translateY(120%);
+  transition:transform .2s ease;
+  pointer-events:none;
+  user-select:none;
+  color:#fff;
+}
+.drop-target.show { transform:translateY(0); pointer-events:auto; }
+.drop-target.over { outline:2px dashed #fff; }
+.trash { background:rgba(255,60,60,.95); }
+.graph-create { background:rgba(44,62,80,.92); }
