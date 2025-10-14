@@ -1,23 +1,6 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Barkasse Hub</title>
-  <link rel="stylesheet" href="/static/styles.css"/>
-</head>
-<body>
-  <div id="bg"></div>
-  <div id="hud">
-    <header>
-      <h1>SENSOR-HUB</h1>
-      <span id="conn">connecting…</span>
-
-    </header>
-
-<main id="grid">
-  <!-- optional placeholder to show a graph spot on initial load -->
-  <div class="tile graph-tile" data-graph="true" data-bootstrap="true">
+<main id="graphs">
+  <!-- Graph #1 (fixed) -->
+  <div id="graph-1" class="graph-tile" data-graph="true">
     <div class="graph-header">
       <div class="chart-title">—</div>
       <div class="periods" role="group" aria-label="Chart period">
@@ -27,20 +10,34 @@
       </div>
     </div>
     <div class="graph-body" aria-label="History chart drop target">
-      <canvas class="chart" width="1200" height="260"></canvas>
+      <canvas class="chart"></canvas>
+      <div class="chart-hint">Drag a tile here to view its history</div>
+    </div>
+  </div>
+
+  <!-- Graph #2 (fixed) -->
+  <div id="graph-2" class="graph-tile" data-graph="true">
+    <div class="graph-header">
+      <div class="chart-title">—</div>
+      <div class="periods" role="group" aria-label="Chart period">
+        <button data-p="1h" class="active">1h</button>
+        <button data-p="1d">1d</button>
+        <button data-p="max">max</button>
+      </div>
+    </div>
+    <div class="graph-body" aria-label="History chart drop target">
+      <canvas class="chart"></canvas>
       <div class="chart-hint">Drag a tile here to view its history</div>
     </div>
   </div>
 </main>
 
+<section id="topics-wrap">
+  <div id="topics-head">Topics (scroll horizontally)</div>
+  <div id="topics" aria-label="Topics strip"></div>
+</section>
 
-    <!-- Tile action dropzones -->
-    <div class="utility-drops" role="group" aria-label="Tile actions">
-      <div id="trash" class="drop-target trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
-      <div id="graph-create" class="drop-target graph-create" aria-label="Drop a tile to create a graph">➕ Drop to create graph</div>
-    </div>
-  </div>
-
-  <script src="/static/app.js"></script>
-</body>
-</html>
+<!-- Utility: trash -->
+<div class="utility-drops" role="group" aria-label="Tile actions">
+  <div id="trash" class="drop-target trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
+</div>
