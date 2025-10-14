@@ -1,33 +1,75 @@
-/* ==== Base Layout ==== */
-html,body { margin:0; height:100%; font-family:system-ui, Segoe UI, Arial, sans-serif; }
+/* ===== Base / Layout ===== */
+html, body { height:100%; margin:0; }
+body { overflow:hidden; font-family:system-ui, Segoe UI, Arial, sans-serif; }
 #bg { position:fixed; inset:0; background:url('/static/assets/background.png') center/cover no-repeat; filter:contrast(1.05) saturate(1.05); }
-#hud { position:relative; z-index:2; display:flex; flex-direction:column; height:100%; background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25)); }
+#hud { position:relative; z-index:2; height:100vh; display:flex; flex-direction:column; background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25)); }
 
 header {
+  flex:0 0 auto;
   display:flex; justify-content:space-between; align-items:center;
   padding:12px 16px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);
 }
 
-/* ==== Grid made of 1×1 cells (dense packing) ==== */
-main#grid {
+/* ===== Graphs row: exactly two graphs side-by-side (each 50% width) ===== */
+#graphs {
+  flex:0 0 auto;
   display:grid;
-  /* 1x1 cell: width track + fixed row height */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  grid-auto-rows: 160px;           /* 1x1 row height */
-  grid-auto-flow: row dense;       /* fill gaps tightly */
+  grid-template-columns: 1fr 1fr; /* two columns -> 50% each */
   gap:12px;
-  padding:100px 12px 12px;
+  padding:12px;
 }
 
-/* ==== Tiles default: 1×1 ==== */
-.tile {
-  grid-column: span 1;
-  grid-row: span 1;
-
+/* Graph tiles are fixed height */
+.graph-tile {
   position:relative;
   background:rgba(255,255,255,.88);
   border-radius:16px;
   padding:12px 14px;
+  box-shadow:0 6px 14px rgba(0,0,0,.15);
+  height:340px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.graph-tile .graph-header {
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+}
+#graphs .chart-title { font-weight:600; opacity:.9; }
+.graph-tile .graph-body { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; }
+.graph-tile canvas.chart { flex:1; width:100%; height:100%; display:block; }
+.graph-tile .chart-hint { align-self:flex-end; margin-top:8px; opacity:.7; font-size:12px; }
+.chart-over { outline:2px dashed #4a90e2; border-radius:14px; }
+
+.periods { display:flex; gap:6px; margin:0; }
+.periods button { border:0; border-radius:999px; padding:6px 12px; background:rgba(0,0,0,.08); cursor:pointer; }
+.periods button.active { background:#000; color:#fff; }
+
+/* ===== Topics strip: horizontal-only scroll, no vertical page scroll ===== */
+#topics-wrap {
+  flex:1 1 auto;
+  display:flex; flex-direction:column;
+  padding:0 12px 12px;
+  overflow:hidden; /* contain inner scroller */
+}
+
+/* label/header row */
+#topics-head { flex:0 0 auto; color:#fff; padding:6px 2px; opacity:.9; font-size:14px; }
+
+/* the horizontal scroller */
+#topics {
+  flex:1 1 auto;
+  display:flex; flex-direction:row; gap:12px;
+  overflow-x:auto; overflow-y:hidden; scroll-snap-type:x proximity;
+  padding-bottom:6px;
+}
+
+/* ===== Topic tiles (fixed size, 1x1 “cells”) ===== */
+.tile {
+  flex:0 0 260px;       /* fixed width */
+  height:140px;         /* fixed height */
+  scroll-snap-align:start;
+
+  position:relative;
+  background:rgba(255,255,255,.88);
+  border-radius:16px; padding:12px 14px;
   box-shadow:0 6px 14px rgba(0,0,0,.15);
   cursor:grab;
   transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
@@ -37,93 +79,25 @@ main#grid {
 .tile .meta { color:#444; font-size:12px; opacity:.8; }
 .tile .value { font-size:32px; font-weight:700; margin-top:6px; }
 .tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
-.tile .dot {
-  position:absolute; right:10px; top:10px; width:10px; height:10px;
-  border-radius:50%;
-  box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
-}
+.tile .dot { position:absolute; right:10px; top:10px; width:10px; height:10px; border-radius:50%;
+  box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25); }
 
-/* Drag states + entrance */
 .tile.dragging { opacity:.9; cursor:grabbing; box-shadow:0 10px 22px rgba(0,0,0,.18); transform:scale(1.02); }
 .opacity-0 { opacity:0; transform:scale(0.95); transition:opacity .5s, transform .5s; }
 
-/* ==== Graph Tiles: 2×2 space ==== */
-.tile.graph-tile {
-  grid-column: span 2;     /* 2 columns wide */
-  grid-row: span 2;        /* 2 rows tall (=> 320px because rows are 160px) */
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  min-height:0;
-}
-
-/* Graph header (title + period switcher) */
-.tile.graph-tile .graph-header {
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:12px;
-}
-.chart-title { font-weight:600; opacity:.9; }
-
-/* Graph body + canvas + hint */
-.tile.graph-tile .graph-body {
-  flex:1;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  justify-content:flex-end;
-}
-.chart {                       /* canvas; JS sets internal pixel size */
-  flex:1;
-  width:100%;
-  height:100%;
-  display:block;
-}
-.chart-hint {
-  align-self:flex-end;
-  margin-top:8px;
-  opacity:.7;
-  font-size:12px;
-}
-
-/* Drag-over highlight for graph drop */
-.chart-over { outline:2px dashed #4a90e2; border-radius:14px; }
-
-/* ==== Period buttons ==== */
-.periods { display:flex; gap:6px; margin:0; }
-.periods button {
-  border:0; border-radius:999px; padding:6px 12px;
-  background:rgba(0,0,0,.08); cursor:pointer;
-}
-.periods button.active { background:#000; color:#fff; }
-
-/* ==== Utility Drop Targets (trash / create graph) ==== */
+/* ===== Utility Drop Targets ===== */
 .utility-drops {
-  position:fixed;
-  bottom:18px; right:18px;
+  position:fixed; bottom:18px; right:18px;
   display:flex; gap:12px;
 }
 .drop-target {
-  padding:12px 14px;
-  border-radius:14px;
+  padding:12px 14px; border-radius:14px;
   box-shadow:0 8px 18px rgba(0,0,0,.25);
-  transform:translateY(120%);
-  transition:transform .2s ease;
+  transform:translateY(120%); transition:transform .2s ease;
   pointer-events:none; user-select:none; color:#fff;
 }
 .drop-target.show { transform:translateY(0); pointer-events:auto; }
 .drop-target.over { outline:2px dashed #fff; }
 .trash { background:rgba(255,60,60,.95); }
-.graph-create { background:rgba(44,62,80,.92); }
 
-/* ==== Placeholder used while dragging (shows target space) ==== */
-.placeholder {
-  border:2px dashed rgba(0,0,0,.35);
-  border-radius:16px;
-  background:transparent;
-  min-height:0;
-}
-.placeholder.size-1x1 { grid-column: span 1; grid-row: span 1; }
-.placeholder.size-2x2 { grid-column: span 2; grid-row: span 2; }
-
+.graph-create { display:none !important; }
