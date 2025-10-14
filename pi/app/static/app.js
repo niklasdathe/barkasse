@@ -21,7 +21,8 @@ function ageMinutesFromSeen(k){ const t=lastSeen.get(k); return t? (Date.now()-t
 function ensureTile(o){
   const k = key(o);
   let el = topics.querySelector(`[data-k="${CSS.escape(k)}"]`);
-  if(!el){
+  if (!el) {
+    // --- create tile
     el = document.createElement('div');
     el.className = 'tile opacity-0';
     el.dataset.k = k;
@@ -30,20 +31,76 @@ function ensureTile(o){
       <h3>${o.cluster} / ${o.sensor}</h3>
       <div class="meta node"></div>
       <div class="value"><span class="num">—</span><span class="unit"></span></div>
-      <div class="meta ts"></div>`;
-    // make topic tiles draggable (graphs are not)
-    el.setAttribute('draggable','true');
-    topics.appendChild(el);
-    requestAnimationFrame(()=>el.classList.remove('opacity-0'));
+      <div class="meta ts"></div>
+    `;
 
-    /* Drag handlers (no rearrange; only graphs + trash are valid targets) */
-    el.addEventListener('dragstart', onTileDragStart, {passive:true});
-    el.addEventListener('dragend', onTileDragEnd, {passive:true});
-    // Prevent accidental native image drag inside tile
-    el.addEventListener('mousedown', e => { if (e.target.tagName === 'IMG') e.preventDefault(); });
+    // --- append + fade in
+    topics.appendChild(el);
+    requestAnimationFrame(() => el.classList.remove('opacity-0'));
+
+    // --- touch vs mouse: default drag for mouse, long-press for touch
+    const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!isCoarse) {
+      // Mouse/precision pointer: regular drag
+      el.setAttribute('draggable', 'true');
+    }
+
+    // --- common handlers
+    el.addEventListener('dragstart', onTileDragStart);
+    el.addEventListener('dragend', onTileDragEnd);
+
+    // Avoid native image drag ghosts inside the tile
+    el.addEventListener('mousedown', (e) => {
+      if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+    });
+
+    // --- Touch-friendly drag: enable only after long-press (~400 ms)
+    if (isCoarse) {
+      let lpTimer = null;
+
+      const enableDrag = () => {
+        el.setAttribute('draggable', 'true');
+        el.classList.add('drag-ready');  // optional styling hook
+      };
+      const disableDrag = () => {
+        el.removeAttribute('draggable');
+        el.classList.remove('drag-ready');
+      };
+
+      el.addEventListener('touchstart', () => {
+        // start long-press timer; scrolling cancels it
+        lpTimer = setTimeout(enableDrag, 400);
+      }, { passive: true });
+
+      el.addEventListener('touchmove', () => {
+        // user is scrolling -> cancel drag activation
+        clearTimeout(lpTimer);
+      }, { passive: true });
+
+      el.addEventListener('touchend', () => {
+        clearTimeout(lpTimer);
+        // if a drag did not actually happen, turn drag back off shortly after
+        setTimeout(() => {
+          if (!el.classList.contains('dragging')) disableDrag();
+        }, 50);
+      }, { passive: true });
+
+      // After any drag completes, disable again so scrolling stays silky
+      el.addEventListener('dragend', () => {
+        disableDrag();
+      });
+    }
   }
+
+  // --- update tile content
+  el.querySelector('.node').textContent = o.node || '';
+  el.querySelector('.num').textContent  = formatValue(o.value);
+  el.querySelector('.unit').textContent = o.unit || '';
+  el.querySelector('.ts').textContent   = o.ts || '';
+
   return el;
 }
+
 function paintDot(el){
   const k = el.dataset.k; if(!k) return;
   const m = ageMinutesFromSeen(k);
