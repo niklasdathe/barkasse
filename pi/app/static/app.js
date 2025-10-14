@@ -1,9 +1,8 @@
 /* === globals === */
-const grid = document.getElementById('grid');
+const topics = document.getElementById('topics');  // horizontal scroller for topic tiles
 const conn = document.getElementById('conn');
 
 const trash = document.getElementById('trash');
-const graphCreate = document.getElementById('graph-create');
 const DEFAULT_CHART_HINT = 'Drag a tile here to view its history';
 
 const store = new Map();                 // key -> last payload
@@ -12,106 +11,16 @@ const mutedUntilNextUpdate = new Set();
 
 let ws, reconnectTimer = null;
 let draggedTile = null;
-let allowAutoSort = true;
-let placeholder = null;
 
 /* === helpers === */
 function key(o){ return `${o.node}/${o.cluster}/${o.sensor || 'state'}`; }
 function formatValue(v){ return (v===undefined||v===null||v==='') ? '—' : (typeof v==='number'? v.toFixed(2): String(v)); }
 function ageMinutesFromSeen(k){ const t=lastSeen.get(k); return t? (Date.now()-t)/60000 : Infinity; }
 
-/* helper: ensure placeholder of correct size is present */
-function ensurePlaceholder(forGraph) {
-  if (!placeholder) {
-    placeholder = document.createElement('div');
-    placeholder.className = 'placeholder';
-  }
-  placeholder.classList.toggle('size-2x2', !!forGraph);
-  placeholder.classList.toggle('size-1x1', !forGraph);
-  return placeholder;
-}
-
-/* helper: place placeholder at intended position based on pointer */
-function movePlaceholderToPointer(clientX, clientY) {
-  if (!placeholder) return;
-
-  // find closest tile (or placeholder) to the pointer
-  const candidates = [...grid.children].filter(el => el !== draggedTile && el !== placeholder);
-  if (candidates.length === 0) {
-    grid.appendChild(placeholder);
-    return;
-  }
-  let closest = null, mind = Infinity;
-  for (const el of candidates) {
-    const r = el.getBoundingClientRect();
-    const cx = r.left + r.width/2, cy = r.top + r.height/2;
-    const d = Math.hypot(clientX - cx, clientY - cy);
-    if (d < mind) { mind = d; closest = el; }
-  }
-  if (!closest) { grid.appendChild(placeholder); return; }
-
-  // insert before or after based on which side of the element we are
-  const r = closest.getBoundingClientRect();
-  const before = (clientY < r.top + r.height/2) || (Math.abs(clientY - (r.top + r.height/2)) < r.height/2 && clientX < r.left + r.width/2);
-  if (before) grid.insertBefore(placeholder, closest);
-  else grid.insertBefore(placeholder, closest.nextSibling);
-}
-
-/* modify your existing drag handlers */
-function onTileDragStart(e){
-  draggedTile = e.currentTarget;
-  allowAutoSort = false;
-  draggedTile.classList.add('dragging');
-  e.dataTransfer.effectAllowed='move';
-  e.dataTransfer.setData('text/plain', draggedTile.dataset.k || draggedTile.dataset.graph || '');
-  showDropTargets();
-
-  // create a placeholder matching size (1x1 for normal tiles, 2x2 for graphs)
-  ensurePlaceholder(draggedTile.dataset.graph === 'true');
-  // put placeholder right after dragged element to keep layout stable
-  if (draggedTile.nextSibling) grid.insertBefore(placeholder, draggedTile.nextSibling);
-  else grid.appendChild(placeholder);
-
-  // optional: small transparent preview cursor
-  e.dataTransfer.setDragImage(draggedTile, 10, 10);
-}
-
-function onTileDragEnd(){
-  if(!draggedTile) return;
-  draggedTile.classList.remove('dragging');
-  draggedTile = null;
-
-  // remove placeholder if still present
-  if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-  placeholder = null;
-
-  hideDropTargets();
-}
-
-/* let the whole grid be a drop target to place tiles into gaps */
-grid.addEventListener('dragover', e=>{
-  if(!draggedTile) return;
-  e.preventDefault();
-  movePlaceholderToPointer(e.clientX, e.clientY);
-});
-
-grid.addEventListener('drop', e=>{
-  if(!draggedTile || !placeholder) return;
-  e.preventDefault();
-  // drop the dragged tile where the placeholder is
-  grid.insertBefore(draggedTile, placeholder);
-  // clean up
-  placeholder.parentNode.removeChild(placeholder);
-  placeholder = null;
-  draggedTile.classList.remove('dragging');
-  draggedTile = null;
-  hideDropTargets();
-});
-
-/* === tiles === */
+/* === topic tiles (1x1) === */
 function ensureTile(o){
   const k = key(o);
-  let el = document.querySelector(`[data-k="${CSS.escape(k)}"]`);
+  let el = topics.querySelector(`[data-k="${CSS.escape(k)}"]`);
   if(!el){
     el = document.createElement('div');
     el.className = 'tile opacity-0';
@@ -123,7 +32,7 @@ function ensureTile(o){
       <div class="value"><span class="num">—</span><span class="unit"></span></div>
       <div class="meta ts"></div>`;
     el.setAttribute('draggable','true');
-    grid.appendChild(el);
+    topics.appendChild(el);
     requestAnimationFrame(()=>el.classList.remove('opacity-0'));
     el.addEventListener('dragstart', onTileDragStart);
     el.addEventListener('dragend', onTileDragEnd);
@@ -131,8 +40,7 @@ function ensureTile(o){
   return el;
 }
 function paintDot(el){
-  if (!el.dataset.k) return;
-  const k = el.dataset.k;
+  const k = el.dataset.k; if(!k) return;
   const m = ageMinutesFromSeen(k);
   let color = '#bbb';
   if (m < 3) color = '#2ecc71'; else if (m >= 60) color = '#e74c3c'; else color = '#f1c40f';
@@ -142,7 +50,7 @@ function render(o){
   const k = key(o);
   if (mutedUntilNextUpdate.has(k)) mutedUntilNextUpdate.delete(k);
   const el = ensureTile(o);
-  el.style.display = '';
+  el.style.display = ''; // ensure visible
 
   el.querySelector('.node').textContent = o.node || '';
   el.querySelector('.num').textContent  = formatValue(o.value);
@@ -150,102 +58,56 @@ function render(o){
   el.querySelector('.ts').textContent   = o.ts || '';
   paintDot(el);
 }
-setInterval(()=>{ document.querySelectorAll('.tile[data-k]').forEach(paintDot); }, 30000);
+setInterval(()=>{ topics.querySelectorAll('.tile[data-k]').forEach(paintDot); }, 30000);
 
-/* === Graph tiles (multi-instance) === */
+/* === sort by node/cluster/sensor (stable, alphabetical) === */
+function sortTiles(){
+  const arr = Array.from(topics.children).filter(el => el.classList.contains('tile') && el.dataset.k);
+  arr.sort((a,b)=> (a.dataset.k||'').localeCompare(b.dataset.k||''));
+  arr.forEach(el => topics.appendChild(el));
+}
+
+/* === two graph tiles (fixed) === */
 class GraphTile {
-  constructor(key=null, period='1h'){
+  constructor(rootEl, key=null, period='1h'){
+    this.el = rootEl;
     this.period = period;
     this.key = key;
 
-    this.el = document.createElement('div');
-    this.el.className = 'tile graph-tile';
-    this.el.dataset.graph = 'true';
-    this.el.setAttribute('draggable','true');
-    this.el.innerHTML = `
-      <div class="graph-header">
-        <div class="chart-title">—</div>
-        <div class="periods" role="group" aria-label="Chart period">
-          <button data-p="1h">1h</button>
-          <button data-p="1d">1d</button>
-          <button data-p="max">max</button>
-        </div>
-      </div>
-      <div class="graph-body" aria-label="History chart drop target">
-        <canvas class="chart"></canvas>
-        <div class="chart-hint">${DEFAULT_CHART_HINT}</div>
-      </div>
-    `;
-    grid.appendChild(this.el);
-
     this.title = this.el.querySelector('.chart-title');
-    this.canvas = this.el.querySelector('.chart');
+    this.canvas = this.el.querySelector('canvas.chart');
     this.hint = this.el.querySelector('.chart-hint');
     this.buttons = Array.from(this.el.querySelectorAll('.periods button'));
 
-    this.el.addEventListener('dragstart', onTileDragStart);
-    this.el.addEventListener('dragend', onTileDragEnd);
+    this.el.setAttribute('draggable','true'); // can drag the graph tile itself (optional)
     this.el.addEventListener('dragover', e => this.onDragOver(e));
     this.el.addEventListener('dragleave', e => this.onDragLeave(e));
     this.el.addEventListener('drop', e => this.onDrop(e));
-    this.buttons.forEach(b => b.addEventListener('click', e => this.onPeriodClick(e)));
 
+    this.buttons.forEach(b => b.addEventListener('click', e => this.onPeriodClick(e)));
     this.syncButtons();
     this.reset();
 
-    /* === NEW: make canvas pixel size match the fixed tile size (crisp) === */
-    this.resizeObserver = new ResizeObserver(() => this.resizeCanvasToTile());
+    // crisp canvas sizing
+    this.resizeObserver = new ResizeObserver(()=>this.resizeCanvas());
     this.resizeObserver.observe(this.el);
 
     if (this.key) this.draw();
   }
+  destroy(){ if(this.resizeObserver) this.resizeObserver.disconnect(); }
 
-  destroy(){
-    if (this.resizeObserver) this.resizeObserver.disconnect();
-    this.el.removeEventListener('dragstart', onTileDragStart);
-    this.el.removeEventListener('dragend', onTileDragEnd);
-    this.el.remove();
-  }
+  syncButtons(){ this.buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.p === this.period)); }
+  onPeriodClick(e){ e.preventDefault(); this.period = e.currentTarget.dataset.p; this.syncButtons(); if(this.key) this.draw(); }
 
-  /* === NEW === */
-  resizeCanvasToTile(){
-    const body = this.el.querySelector('.graph-body');
-    if (!body) return;
-    const cssW = Math.max(1, Math.floor(body.clientWidth));
-    const cssH = Math.max(1, Math.floor(body.clientHeight - (this.hint?.offsetHeight || 0)));
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-
-    // set internal pixel buffer size to avoid blur
-    this.canvas.width  = cssW * dpr;
-    this.canvas.height = cssH * dpr;
-
-    // keep CSS size logical
-    this.canvas.style.width = cssW + 'px';
-    this.canvas.style.height = cssH + 'px';
-
-    // scale the context so drawing code can stay in CSS pixels
-    const ctx = this.canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // redraw if data present
-    if (this.key) this.draw();
-  }
-
-  syncButtons(){
-    this.buttons.forEach(btn=>{
-      if(btn.dataset.p === this.period) btn.classList.add('active');
-      else btn.classList.remove('active');
-    });
-  }
-
-  onPeriodClick(e){
+  onDragOver(e){
+    if(!draggedTile || !draggedTile.dataset.k) return;
     e.preventDefault();
-    this.period = e.currentTarget.dataset.p;
-    this.syncButtons();
-    if (this.key) this.draw();
+    this.el.classList.add('chart-over');
   }
-  onDragOver(e){ if(!draggedTile || !draggedTile.dataset.k) return; e.preventDefault(); this.el.classList.add('chart-over'); }
-  onDragLeave(e){ const rel = e.relatedTarget; if (!rel || !this.el.contains(rel)) this.el.classList.remove('chart-over'); }
+  onDragLeave(e){
+    const rel = e.relatedTarget;
+    if (!rel || !this.el.contains(rel)) this.el.classList.remove('chart-over');
+  }
   async onDrop(e){
     if(!draggedTile || !draggedTile.dataset.k) return;
     e.preventDefault();
@@ -255,30 +117,52 @@ class GraphTile {
   }
 
   reset(){
-    this.title.textContent = '—';
-    this.hint.textContent = DEFAULT_CHART_HINT;
+    if (this.title) this.title.textContent = '—';
+    if (this.hint)  this.hint.textContent  = DEFAULT_CHART_HINT;
     const ctx = this.canvas.getContext('2d');
     ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
   }
 
+  resizeCanvas(){
+    const body = this.el.querySelector('.graph-body');
+    if(!body) return;
+    const cssW = Math.max(1, Math.floor(body.clientWidth));
+    const cssH = Math.max(1, Math.floor(body.clientHeight - (this.hint?.offsetHeight || 0)));
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+
+    this.canvas.width  = cssW * dpr;
+    this.canvas.height = cssH * dpr;
+    this.canvas.style.width = cssW + 'px';
+    this.canvas.style.height = cssH + 'px';
+
+    const ctx = this.canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.key) this.draw();
+  }
+
   async draw(){
     if(!this.key) return;
-    this.title.textContent = `${this.key} (${this.period})`;
+    if (this.title) this.title.textContent = `${this.key} (${this.period})`;
     this.syncButtons();
 
     const ctx = this.canvas.getContext('2d');
     ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
 
     let unit, data;
-    try { ({unit, data} = await fetchHistory(this.key, this.period)); }
-    catch { this.hint.textContent = 'Failed to load data'; return; }
-    if (!Array.isArray(data) || data.length === 0){ this.hint.textContent = 'No data'; return; }
-    this.hint.textContent = '';
+    try {
+      ({unit, data} = await fetchHistory(this.key, this.period));
+    } catch {
+      if (this.hint) this.hint.textContent = 'Failed to load data';
+      return;
+    }
+    if (!Array.isArray(data) || data.length === 0){
+      if (this.hint) this.hint.textContent = 'No data';
+      return;
+    }
+    if (this.hint) this.hint.textContent = '';
 
-    // use CSS pixel size (post-transform) by reading the styled size
     const w = parseFloat(this.canvas.style.width)  || this.canvas.width;
     const h = parseFloat(this.canvas.style.height) || this.canvas.height;
-
     const padL=50,padR=12,padT=12,padB=24;
     const plotW=w-padL-padR, plotH=h-padT-padB;
 
@@ -288,11 +172,9 @@ class GraphTile {
     const minY=Math.min(...ys), maxY=Math.max(...ys);
     const yR=(maxY-minY)||1;
 
-    // axes
     ctx.lineWidth=1; ctx.beginPath();
     ctx.moveTo(padL,padT); ctx.lineTo(padL,h-padB); ctx.lineTo(w-padR,h-padB); ctx.stroke();
 
-    // Y ticks
     ctx.font='12px system-ui';
     for(let i=0;i<=4;i++){
       const yv=minY+(yR*i/4);
@@ -301,7 +183,6 @@ class GraphTile {
       ctx.globalAlpha=.12; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke(); ctx.globalAlpha=1;
     }
 
-    // line
     ctx.beginPath();
     data.forEach((d,i)=>{
       const x = padL + ((new Date(d.ts).getTime()-minX)/(maxX-minX||1))*plotW;
@@ -310,7 +191,6 @@ class GraphTile {
     });
     ctx.stroke();
 
-    // last marker
     const last=data[data.length-1];
     const lx=padL+((new Date(last.ts).getTime()-minX)/(maxX-minX||1))*plotW;
     const ly=h-padB-((last.value-minY)/yR)*plotH;
@@ -319,8 +199,41 @@ class GraphTile {
   }
 }
 
+/* instantiate exactly two graphs (fixed), no adding/removing */
+const graph1 = new GraphTile(document.getElementById('graph-1'), null, '1h');
+const graph2 = new GraphTile(document.getElementById('graph-2'), null, '1h');
+const graphs = [graph1, graph2];
 
-const graphTiles = new Set();  // hold all GraphTile instances
+/* === drag/drop for topic tiles: only trash + graphs === */
+function onTileDragStart(e){
+  draggedTile = e.currentTarget;
+  draggedTile.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain', draggedTile.dataset.k || '');
+  showTrash();
+}
+function onTileDragEnd(){
+  if(!draggedTile) return;
+  draggedTile.classList.remove('dragging');
+  draggedTile=null;
+  hideTrash();
+}
+
+function showTrash(){ trash.classList.add('show'); }
+function hideTrash(){ trash.classList.remove('show','over'); }
+trash.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault(); trash.classList.add('over'); });
+trash.addEventListener('dragleave', ()=>trash.classList.remove('over'));
+trash.addEventListener('drop', e=>{
+  e.preventDefault();
+  trash.classList.remove('over');
+  if(!draggedTile || !draggedTile.dataset.k) return;
+  const k = draggedTile.dataset.k;
+  mutedUntilNextUpdate.add(k);
+  draggedTile.style.display='none';
+  draggedTile.classList.remove('dragging');
+  draggedTile=null;
+  hideTrash();
+});
 
 /* === WS === */
 function connectWS(){
@@ -335,107 +248,18 @@ function connectWS(){
       const msg = JSON.parse(ev.data);
       if (msg.type==='snapshot'){
         msg.data.forEach(o=>{ const k=key(o); store.set(k,o); lastSeen.set(k, Date.now()); if(!mutedUntilNextUpdate.has(k)) render(o);});
-        if (allowAutoSort) sortTiles();
+        sortTiles();
       } else if (msg.type==='update'){
         const o = msg.data; const k = key(o);
         store.set(k,o); lastSeen.set(k, Date.now()); render(o);
-        if (allowAutoSort) sortTiles();
+        sortTiles();
         // refresh any graphs showing this key
-        graphTiles.forEach(gt => { if (gt.key === k) gt.draw(); });
+        graphs.forEach(gt => { if (gt.key === k) gt.draw(); });
       }
     }catch(e){ console.error('WS JSON error', e); }
   };
 }
 function scheduleReconnect(){ if (reconnectTimer) return; reconnectTimer=setTimeout(()=>{reconnectTimer=null; connectWS();},4000); }
-
-/* === sorting === */
-function sortTiles(){ Array.from(grid.children).sort((a,b)=>{
-  // keep graphs roughly grouped by insertion order while sorting sensors by key
-  const ga = a.dataset.graph === 'true', gb = b.dataset.graph === 'true';
-  if (ga && !gb) return -1;
-  if (!ga && gb) return 1;
-  if (!ga && !gb) return (a.dataset.k||'').localeCompare(b.dataset.k||'');
-  return 0;
-}).forEach(t=>grid.appendChild(t)); }
-setInterval(()=>{ if (allowAutoSort) sortTiles(); }, 30000);
-
-/* === drag: tiles / dropzones === */
-function showDropTargets(){
-  trash.classList.add('show');
-  graphCreate.classList.add('show');
-}
-function hideDropTargets(){
-  trash.classList.remove('show', 'over');
-  graphCreate.classList.remove('show', 'over');
-  document.querySelectorAll('.graph-tile').forEach(t=>t.classList.remove('chart-over'));
-}
-
-function onTileDragStart(e){
-  draggedTile=e.currentTarget;
-  allowAutoSort=false;
-  draggedTile.classList.add('dragging');
-  e.dataTransfer.effectAllowed='move';
-  e.dataTransfer.setData('text/plain', draggedTile.dataset.k||'');
-  showDropTargets();
-}
-function onTileDragEnd(){
-  if(!draggedTile) return;
-  draggedTile.classList.remove('dragging');
-  draggedTile=null;
-  hideDropTargets();
-}
-
-grid.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault();
-  const others=[...grid.querySelectorAll('.tile:not(.dragging)')]; if(!others.length) return;
-  let closest=null, mind=Infinity;
-  for(const t of others){ const r=t.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; const d=Math.hypot(e.clientX-cx,e.clientY-cy); if(d<mind){mind=d;closest=t;} }
-  if(closest && closest!==draggedTile){ grid.insertBefore(draggedTile, closest); }
-});
-
-trash.addEventListener('dragover', e=>{ if(!draggedTile) return; e.preventDefault(); trash.classList.add('over'); });
-trash.addEventListener('dragleave', ()=>trash.classList.remove('over'));
-trash.addEventListener('drop', e=>{
-  e.preventDefault();
-  trash.classList.remove('over');
-  if(!draggedTile) return;
-  const tile = draggedTile;
-  try {
-    if (tile.dataset.graph === 'true'){
-      // remove that specific graph
-      const inst = [...graphTiles].find(gt => gt.el === tile);
-      if (inst){ graphTiles.delete(inst); inst.destroy(); }
-      tile.classList.remove('dragging');
-    } else if (tile.dataset.k){
-      const k = tile.dataset.k;
-      mutedUntilNextUpdate.add(k);
-      tile.style.display='none';
-      tile.classList.remove('dragging');
-      // also clear any graphs showing this key
-      graphTiles.forEach(gt => { if (gt.key === k){ gt.key=null; gt.reset(); } });
-    }
-  } finally {
-    draggedTile=null;
-    hideDropTargets();
-  }
-});
-
-graphCreate.addEventListener('dragover', e=>{
-  if(!draggedTile || !draggedTile.dataset.k) return;
-  e.preventDefault();
-  graphCreate.classList.add('over');
-});
-graphCreate.addEventListener('dragleave', ()=>graphCreate.classList.remove('over'));
-graphCreate.addEventListener('drop', async e=>{
-  if(!draggedTile || !draggedTile.dataset.k) return;
-  e.preventDefault();
-  graphCreate.classList.remove('over');
-  const k = draggedTile.dataset.k;
-  const inst = new GraphTile(k, '1h');
-  graphTiles.add(inst);
-  draggedTile.classList.remove('dragging');
-  draggedTile=null;
-  hideDropTargets();
-});
 
 /* === history fetching === */
 async function fetchHistory(k, period){
@@ -444,14 +268,5 @@ async function fetchHistory(k, period){
   return r.json();
 }
 
-/* === start === */
+/* === init === */
 connectWS();
-
-// If your HTML ships an initial (single) graph-tile, upgrade it to a class instance:
-const initialGraph = document.querySelector('.graph-tile[data-bootstrap="true"]');
-if (initialGraph){
-  // replace placeholder with a managed instance (no key bound yet)
-  initialGraph.remove();
-  const inst = new GraphTile(null, '1h');
-  graphTiles.add(inst);
-}
