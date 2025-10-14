@@ -275,6 +275,14 @@ function onTileDragStart(e){
   draggedTile.classList.add('dragging');
   e.dataTransfer.effectAllowed='move';
   e.dataTransfer.setData('text/plain', draggedTile.dataset.k || '');
+  if (typeof e.dataTransfer.setDragImage === 'function') {
+    const rect = draggedTile.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    if (Number.isFinite(offsetX) && Number.isFinite(offsetY)) {
+      e.dataTransfer.setDragImage(draggedTile, offsetX, offsetY);
+    }
+  }
   showTrash();
 }
 function onTileDragEnd(){
