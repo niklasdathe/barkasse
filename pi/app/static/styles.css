@@ -3,12 +3,12 @@
   --tile-h: 140px;              /* topic tile height */
   --tile-w: 260px;              /* topic tile width */
   --topics-gap: 10px;           /* gap between tiles in scroller */
-  --scroll-thickness: 32px;     /* scrollbar thickness for #topics (Chromium) */
+  --scroll-thickness: 24px;     /* scrollbar thickness for #topics */
 
   --pad-h: 20px;                /* horizontal padding around content */
   --pad-v: 6px;                 /* vertical padding around sections */
   --card-radius: 16px;
-  --card-bg: rgba(255,255,255,.88);
+  --card-bg: rgba(255,255,255,.7); /* background rgb color and transparancy can be adjusted here*/
   --shadow: 0 6px 14px rgba(0,0,0,.15);
 }
 
@@ -56,12 +56,7 @@ header {
   overflow-x:auto; overflow-y:hidden;
   scroll-snap-type:x proximity;
   height:calc(var(--tile-h) + var(--scroll-thickness)); /* prevents clipping */
-  padding-bottom:4px;  /* small breathing room so scrollbar doesn’t overlap tiles */
-
-  /* One-finger horizontal scroll on touch */
-  touch-action: pan-x;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
+  padding-bottom:15px;  /* small breathing room so scrollbar doesn’t overlap tiles */
 }
 
 /* Topic tiles (fixed size) */
@@ -134,9 +129,9 @@ header {
   border-radius:var(--card-radius);
   padding:12px 14px;
   box-shadow:var(--shadow);
-  height:320px;                    /* slightly tighter than before */
+  height:320px;                  
   display:flex; flex-direction:column; gap:10px;
-  user-select:none;                /* not draggable; JS also removes draggable attr */
+  user-select:none;             
 }
 .graph-tile .graph-header{
   display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
@@ -147,7 +142,7 @@ header {
   display:flex; flex-direction:column; justify-content:flex-end;
 }
 .graph-tile canvas.chart{
-  flex:1; width:100%; height:100%; display:block;   /* actual pixel size set in JS for crispness */
+  flex:1; width:100%; height:100%; display:block;   /* actual pixel size set in JS */
 }
 .graph-tile .chart-hint{
   align-self:flex-end; margin-top:6px; opacity:.7; font-size:12px;
@@ -162,7 +157,7 @@ header {
 }
 .periods button.active{ background:#000; color:#fff; }
 
-/* ===== Utility Drop Target (only trash) ===== */
+/* ===== Utility Trash Drop Target ===== */
 .utility-drops{
   position:fixed; bottom:14px; right:14px;
   display:flex; gap:10px;
@@ -177,5 +172,5 @@ header {
 .drop-target.over{ outline:2px dashed #fff; }
 .trash{ background:rgba(255,60,60,.95); }
 
-/* No graph-create zone in this layout */
+/* No graph-create zone in this layout (legacy, not used since i decided on having 2 fixed graphs */
 .graph-create{ display:none !important; }
