@@ -5,7 +5,7 @@
   --topics-gap: 10px;           /* gap between tiles in scroller */
   --scroll-thickness: 24px;     /* scrollbar thickness for #topics */
 
-  --pad-h: 20px;                /* horizontal padding around content */
+  --pad-h: 32px;                /* horizontal padding around content */
   --pad-v: 6px;                 /* vertical padding around sections */
   --card-radius: 16px;
   --card-bg: rgba(255,255,255,.7); /* background rgb color and transparancy can be adjusted here*/
