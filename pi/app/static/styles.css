@@ -1,7 +1,7 @@
 /* --- Tunables --- */
 :root{
   --tile-h: 120px;              /* topic tile height */
-  --tile-w: 240px;              /* topic tile width */
+  --tile-w: 200px;              /* topic tile width */
   --topics-gap: 10px;           /* gap between tiles in scroller */
   --scroll-thickness: 30px;     /* scrollbar thickness for #topics */
 
