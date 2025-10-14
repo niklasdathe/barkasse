@@ -13,11 +13,100 @@ const mutedUntilNextUpdate = new Set();
 let ws, reconnectTimer = null;
 let draggedTile = null;
 let allowAutoSort = true;
+let placeholder = null;
 
 /* === helpers === */
 function key(o){ return `${o.node}/${o.cluster}/${o.sensor || 'state'}`; }
 function formatValue(v){ return (v===undefined||v===null||v==='') ? '—' : (typeof v==='number'? v.toFixed(2): String(v)); }
 function ageMinutesFromSeen(k){ const t=lastSeen.get(k); return t? (Date.now()-t)/60000 : Infinity; }
+
+/* helper: ensure placeholder of correct size is present */
+function ensurePlaceholder(forGraph) {
+  if (!placeholder) {
+    placeholder = document.createElement('div');
+    placeholder.className = 'placeholder';
+  }
+  placeholder.classList.toggle('size-2x2', !!forGraph);
+  placeholder.classList.toggle('size-1x1', !forGraph);
+  return placeholder;
+}
+
+/* helper: place placeholder at intended position based on pointer */
+function movePlaceholderToPointer(clientX, clientY) {
+  if (!placeholder) return;
+
+  // find closest tile (or placeholder) to the pointer
+  const candidates = [...grid.children].filter(el => el !== draggedTile && el !== placeholder);
+  if (candidates.length === 0) {
+    grid.appendChild(placeholder);
+    return;
+  }
+  let closest = null, mind = Infinity;
+  for (const el of candidates) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    const d = Math.hypot(clientX - cx, clientY - cy);
+    if (d < mind) { mind = d; closest = el; }
+  }
+  if (!closest) { grid.appendChild(placeholder); return; }
+
+  // insert before or after based on which side of the element we are
+  const r = closest.getBoundingClientRect();
+  const before = (clientY < r.top + r.height/2) || (Math.abs(clientY - (r.top + r.height/2)) < r.height/2 && clientX < r.left + r.width/2);
+  if (before) grid.insertBefore(placeholder, closest);
+  else grid.insertBefore(placeholder, closest.nextSibling);
+}
+
+/* modify your existing drag handlers */
+function onTileDragStart(e){
+  draggedTile = e.currentTarget;
+  allowAutoSort = false;
+  draggedTile.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain', draggedTile.dataset.k || draggedTile.dataset.graph || '');
+  showDropTargets();
+
+  // create a placeholder matching size (1x1 for normal tiles, 2x2 for graphs)
+  ensurePlaceholder(draggedTile.dataset.graph === 'true');
+  // put placeholder right after dragged element to keep layout stable
+  if (draggedTile.nextSibling) grid.insertBefore(placeholder, draggedTile.nextSibling);
+  else grid.appendChild(placeholder);
+
+  // optional: small transparent preview cursor
+  e.dataTransfer.setDragImage(draggedTile, 10, 10);
+}
+
+function onTileDragEnd(){
+  if(!draggedTile) return;
+  draggedTile.classList.remove('dragging');
+  draggedTile = null;
+
+  // remove placeholder if still present
+  if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+  placeholder = null;
+
+  hideDropTargets();
+}
+
+/* let the whole grid be a drop target to place tiles into gaps */
+grid.addEventListener('dragover', e=>{
+  if(!draggedTile) return;
+  e.preventDefault();
+  movePlaceholderToPointer(e.clientX, e.clientY);
+});
+
+grid.addEventListener('drop', e=>{
+  if(!draggedTile || !placeholder) return;
+  e.preventDefault();
+  // drop the dragged tile where the placeholder is
+  grid.insertBefore(draggedTile, placeholder);
+  // clean up
+  placeholder.parentNode.removeChild(placeholder);
+  placeholder = null;
+  draggedTile.classList.remove('dragging');
+  draggedTile = null;
+  hideDropTargets();
+});
 
 /* === tiles === */
 function ensureTile(o){
