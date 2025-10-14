@@ -3,9 +3,9 @@
   --tile-h: 140px;              /* topic tile height */
   --tile-w: 260px;              /* topic tile width */
   --topics-gap: 10px;           /* gap between tiles in scroller */
-  --scroll-thickness: 16px;     /* scrollbar thickness for #topics (Chromium) */
+  --scroll-thickness: 32px;     /* scrollbar thickness for #topics (Chromium) */
 
-  --pad-h: 10px;                /* horizontal padding around content */
+  --pad-h: 20px;                /* horizontal padding around content */
   --pad-v: 6px;                 /* vertical padding around sections */
   --card-radius: 16px;
   --card-bg: rgba(255,255,255,.88);
