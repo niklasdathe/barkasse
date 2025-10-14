@@ -56,7 +56,7 @@ header {
   overflow-x:auto; overflow-y:hidden;
   scroll-snap-type:x proximity;
   height:calc(var(--tile-h) + var(--scroll-thickness)); /* prevents clipping */
-  padding-bottom:15px;  /* small breathing room so scrollbar doesn’t overlap tiles */
+  padding-bottom:25px;  /* small breathing room so scrollbar doesn’t overlap tiles */
 }
 
 /* Topic tiles (fixed size) */
