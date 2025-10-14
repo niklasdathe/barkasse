@@ -17,7 +17,7 @@ function key(o){ return `${o.node}/${o.cluster}/${o.sensor || 'state'}`; }
 function formatValue(v){ return (v===undefined||v===null||v==='') ? '—' : (typeof v==='number'? v.toFixed(2): String(v)); }
 function ageMinutesFromSeen(k){ const t=lastSeen.get(k); return t? (Date.now()-t)/60000 : Infinity; }
 
-/* === topic tiles (1x1) === */
+/* === topic tiles (horizontal list) === */
 function ensureTile(o){
   const k = key(o);
   let el = topics.querySelector(`[data-k="${CSS.escape(k)}"]`);
@@ -31,11 +31,16 @@ function ensureTile(o){
       <div class="meta node"></div>
       <div class="value"><span class="num">—</span><span class="unit"></span></div>
       <div class="meta ts"></div>`;
+    // make topic tiles draggable (graphs are not)
     el.setAttribute('draggable','true');
     topics.appendChild(el);
     requestAnimationFrame(()=>el.classList.remove('opacity-0'));
-    el.addEventListener('dragstart', onTileDragStart);
-    el.addEventListener('dragend', onTileDragEnd);
+
+    /* Drag handlers (no rearrange; only graphs + trash are valid targets) */
+    el.addEventListener('dragstart', onTileDragStart, {passive:true});
+    el.addEventListener('dragend', onTileDragEnd, {passive:true});
+    // Prevent accidental native image drag inside tile
+    el.addEventListener('mousedown', e => { if (e.target.tagName === 'IMG') e.preventDefault(); });
   }
   return el;
 }
@@ -60,14 +65,14 @@ function render(o){
 }
 setInterval(()=>{ topics.querySelectorAll('.tile[data-k]').forEach(paintDot); }, 30000);
 
-/* === sort by node/cluster/sensor (stable, alphabetical) === */
+/* === sort by node/cluster/sensor === */
 function sortTiles(){
   const arr = Array.from(topics.children).filter(el => el.classList.contains('tile') && el.dataset.k);
-  arr.sort((a,b)=> (a.dataset.k||'').localeCompare(b.dataset.k||''));
+  arr.sort((a,b)=> (a.dataset.k||'').localeCompare(b.dataset.k||'')); // alphabetical by "node/cluster/sensor"
   arr.forEach(el => topics.appendChild(el));
 }
 
-/* === two graph tiles (fixed) === */
+/* === TWO fixed graph tiles (NOT draggable) === */
 class GraphTile {
   constructor(rootEl, key=null, period='1h'){
     this.el = rootEl;
@@ -79,7 +84,10 @@ class GraphTile {
     this.hint = this.el.querySelector('.chart-hint');
     this.buttons = Array.from(this.el.querySelectorAll('.periods button'));
 
-    this.el.setAttribute('draggable','true'); // can drag the graph tile itself (optional)
+    // Make sure graph tiles are NOT draggable
+    this.el.removeAttribute('draggable');
+
+    // Accept drops from topic tiles
     this.el.addEventListener('dragover', e => this.onDragOver(e));
     this.el.addEventListener('dragleave', e => this.onDragLeave(e));
     this.el.addEventListener('drop', e => this.onDrop(e));
@@ -199,12 +207,12 @@ class GraphTile {
   }
 }
 
-/* instantiate exactly two graphs (fixed), no adding/removing */
+/* instantiate exactly two graphs (fixed) */
 const graph1 = new GraphTile(document.getElementById('graph-1'), null, '1h');
 const graph2 = new GraphTile(document.getElementById('graph-2'), null, '1h');
 const graphs = [graph1, graph2];
 
-/* === drag/drop for topic tiles: only trash + graphs === */
+/* === drag/drop for topic tiles: only graphs + trash === */
 function onTileDragStart(e){
   draggedTile = e.currentTarget;
   draggedTile.classList.add('dragging');
