@@ -1,14 +1,14 @@
 /* --- Tunables --- */
 :root{
-  --tile-h: 140px;              /* topic tile height */
-  --tile-w: 260px;              /* topic tile width */
+  --tile-h: 120px;              /* topic tile height */
+  --tile-w: 240px;              /* topic tile width */
   --topics-gap: 10px;           /* gap between tiles in scroller */
-  --scroll-thickness: 24px;     /* scrollbar thickness for #topics */
+  --scroll-thickness: 30px;     /* scrollbar thickness for #topics */
 
   --pad-h: 32px;                /* horizontal padding around content */
   --pad-v: 6px;                 /* vertical padding around sections */
   --card-radius: 16px;
-  --card-bg: rgba(255,255,255,.7); /* background rgb color and transparancy can be adjusted here*/
+  --card-bg: rgba(255,255,255,.8); /* background rgb color and transparancy can be adjusted here*/
   --shadow: 0 6px 14px rgba(0,0,0,.15);
 }
 
@@ -37,6 +37,7 @@ header {
 
 /* ===== Topics strip: horizontal-only scroll, one-finger friendly ===== */
 #topics-wrap{
+  margin-top: 100px;
   flex:0 0 auto;                   /* we’ll set exact height on #topics */
   display:flex; flex-direction:column;
   padding:var(--pad-v) var(--pad-h) 4px;  /* slightly tighter */
@@ -107,11 +108,6 @@ header {
 #topics::-webkit-scrollbar-thumb:hover{
   background:rgba(0,0,0,.5);
   background-clip:content-box;
-}
-
-/* Optional: slightly larger scrollbar on coarse pointers (touch) */
-@media (pointer: coarse){
-  :root{ --scroll-thickness: 18px; }
 }
 
 /* ===== Graphs row: two fixed graphs below topics ===== */
