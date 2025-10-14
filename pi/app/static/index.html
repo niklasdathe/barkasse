@@ -15,7 +15,15 @@
       <span id="conn">connecting…</span>
     </header>
 
-    <!-- Two fixed graphs (no add/remove) -->
+    <!-- Topics: horizontal-only scroll (one-finger friendly) -->
+    <section id="topics-wrap" aria-label="Topics">
+      <div id="topics-head">Topics (scroll horizontally)</div>
+      <div id="topics" aria-live="polite" aria-label="Topics strip">
+        <!-- Topic tiles are injected by app.js -->
+      </div>
+    </section>
+
+    <!-- Two fixed graphs (no add/remove, not draggable) -->
     <main id="graphs">
       <!-- Graph #1 -->
       <div id="graph-1" class="graph-tile" data-graph="true" aria-label="History graph 1 drop target">
@@ -50,15 +58,7 @@
       </div>
     </main>
 
-    <!-- Topics: horizontal-only scroll -->
-    <section id="topics-wrap" aria-label="Topics">
-      <div id="topics-head">Topics (scroll horizontally)</div>
-      <div id="topics" aria-live="polite" aria-label="Topics strip">
-        <!-- Topic tiles are injected here by app.js -->
-      </div>
-    </section>
-
-    <!-- Utility drop target:  trash -->
+    <!-- Utility drop target: ONLY trash -->
     <div class="utility-drops" role="group" aria-label="Tile actions">
       <div id="trash" class="drop-target trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
     </div>
