@@ -1,0 +1,238 @@
+[
+    {
+        "id": "barkasse-hub",
+        "type": "tab",
+        "label": "Barkasse Hub",
+        "disabled": false,
+        "info": "MQTT -> LATEST/HISTORY -> WebSocket /ws -> HTTP /history + /debug/stats"
+    },
+    {
+        "id": "mqtt-broker-barkasse",
+        "type": "mqtt-broker",
+        "name": "Mosquitto",
+        "broker": "mosquitto",
+        "port": "1883",
+        "clientid": "",
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": ""
+    },
+    {
+        "id": "6917f99753904565",
+        "type": "websocket-listener",
+        "path": "/ws",
+        "wholemsg": "false"
+    },
+    {
+        "id": "mqtt-in-barkasse",
+        "type": "mqtt in",
+        "z": "barkasse-hub",
+        "name": "MQTT IN barkasse/#",
+        "topic": "barkasse/#",
+        "qos": "0",
+        "datatype": "auto",
+        "broker": "mqtt-broker-barkasse",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 80,
+        "wires": [
+            [
+                "fn-parse-expand"
+            ]
+        ]
+    },
+    {
+        "id": "fn-parse-expand",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Parse & expand sensors",
+        "func": "// Parse payload and expand nested sensors map like FastAPI main.py\n// Input:  msg.payload (string or object)\n// Output: multiple messages (one per sensor) via node.send\n\nlet payload = msg.payload;\nlet out = [];\n\n// 1) Wenn payload String ist, nur JSON parsen, wenn er auch so aussieht\nif (typeof payload === \"string\") {\n    const trimmed = payload.trim();\n\n    // nur versuchen, JSON zu parsen, wenn es mit { oder [ anfängt\n    if (trimmed.startsWith(\"{\") || trimmed.startsWith(\"[\")) {\n        try {\n            payload = JSON.parse(trimmed);\n        } catch (e) {\n            node.warn(`JSON parse error on topic ${msg.topic || \"\"}: ${e}`);\n            return null; // diesen Message-Durchlauf ignorieren\n        }\n    } else {\n        // z.B. \"online\", \"offline\", \"ok\" → für das Dashboard nicht relevant\n        // einfach ignorieren\n        return null;\n    }\n}\n\n// 2) Jetzt ist payload entweder ein Objekt oder wir sind schon raus\nif (payload && typeof payload === \"object\" && payload.sensors && typeof payload.sensors === \"object\") {\n    const base = {\n        node: payload.node || \"?\",\n        cluster: payload.cluster || \"?\",\n        ts: payload.ts\n    };\n\n    for (const [sname, sobj] of Object.entries(payload.sensors)) {\n        if (typeof sobj !== \"object\") continue;\n        const reading = { ...base, sensor: sname, ...sobj };\n        out.push({ payload: reading });\n    }\n} else if (payload && typeof payload === \"object\") {\n    // „flache“ Payloads ohne sensors-Map einfach durchreichen\n    out.push({ payload });\n}\n\n// 3) Alle erzeugten Einzel-Messages zurückgeben\nreturn [out];\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 80,
+        "wires": [
+            [
+                "fn-update-store"
+            ]
+        ]
+    },
+    {
+        "id": "fn-update-store",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Update LATEST/HISTORY + broadcast",
+        "func": "// Mirror FastAPI's in-memory LATEST/HISTORY behavior\n\nfunction ensureIso(ts) {\n    if (ts === undefined || ts === null || ts === \"\") {\n        return new Date().toISOString();\n    }\n    let d;\n    if (typeof ts === \"number\") {\n        d = new Date(ts);\n    } else {\n        const s = String(ts);\n        if (/^\\d+(\\.\\d+)?$/.test(s)) {\n            d = new Date(Number(s));\n        } else {\n            d = new Date(s);\n        }\n    }\n    if (isNaN(d)) return new Date().toISOString();\n    return d.toISOString();\n}\n\nlet latest  = global.get(\"LATEST\")  || {};\nlet history = global.get(\"HISTORY\") || {};\n\nlet p = msg.payload || {};\np.ts = ensureIso(p.ts);\n\nconst key = `${p.node || '?'}/${p.cluster || '?'}/${p.sensor || 'state'}`;\n\n// LATEST\nlatest[key] = p;\n\n// HISTORY only for numeric values\nconst v = Number(p.value);\nif (!Number.isNaN(v)) {\n    let arr = history[key] || [];\n    arr.push({ ts: p.ts, value: v, unit: p.unit || \"\" });\n    const MAX_POINTS = 20000;\n    if (arr.length > MAX_POINTS) {\n        arr.splice(0, arr.length - MAX_POINTS);\n    }\n    history[key] = arr;\n}\n\nglobal.set(\"LATEST\", latest);\nglobal.set(\"HISTORY\", history);\n\n// Prepare broadcast message (like FastAPI broadcast)\nmsg.payload = { type: \"update\", data: p };\n// remove _session to broadcast to all websocket clients\ndelete msg._session;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 690,
+        "y": 80,
+        "wires": [
+            [
+                "ws-out-barkasse"
+            ]
+        ]
+    },
+    {
+        "id": "ws-out-barkasse",
+        "type": "websocket out",
+        "z": "barkasse-hub",
+        "name": "WebSocket /ws OUT",
+        "server": "6917f99753904565",
+        "client": "",
+        "x": 1020,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "ws-in-barkasse",
+        "type": "websocket in",
+        "z": "barkasse-hub",
+        "name": "WebSocket /ws IN",
+        "server": "6917f99753904565",
+        "client": "",
+        "x": 190,
+        "y": 200,
+        "wires": [
+            [
+                "fn-ws-snapshot"
+            ]
+        ]
+    },
+    {
+        "id": "fn-ws-snapshot",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Send snapshot on connect",
+        "func": "// On websocket connect, send snapshot of LATEST values\nif (msg._event === \"connect\") {\n    const latest = global.get(\"LATEST\") || {};\n    msg.payload = {\n        type: \"snapshot\",\n        data: Object.values(latest)\n    };\n    // keep _session => only send to this client\n    return msg;\n}\n// ignore any other incoming client messages\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 200,
+        "wires": [
+            [
+                "ws-out-barkasse"
+            ]
+        ]
+    },
+    {
+        "id": "http-in-history",
+        "type": "http in",
+        "z": "barkasse-hub",
+        "name": "GET /history",
+        "url": "/history",
+        "method": "get",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 320,
+        "wires": [
+            [
+                "fn-history"
+            ]
+        ]
+    },
+    {
+        "id": "fn-history",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Build history response",
+        "func": "// Build history JSON like FastAPI /history\n// Query params: key, period=1h|1d|max\n\nconst key = msg.req.query.key;\nconst period = msg.req.query.period || \"1h\";\n\nconst history = global.get(\"HISTORY\") || {};\nconst list = history[key] || [];\n\nif (!Array.isArray(list) || list.length === 0) {\n    msg.payload = { key, unit: \"\", data: [] };\n    return msg;\n}\n\nconst newest = list[list.length - 1];\nconst newestDate = new Date(newest.ts);\nlet cutoff = null;\nif (period === \"1h\") cutoff = new Date(newestDate.getTime() - 3600000);\nelse if (period === \"1d\") cutoff = new Date(newestDate.getTime() - 86400000);\n// period == \"max\" => cutoff null\n\nlet data = [];\nlet unit = \"\";\nfor (const p of list) {\n    const ts = new Date(p.ts);\n    if (cutoff && ts < cutoff) continue;\n    data.push(p);\n    unit = p.unit || unit;\n}\n\nmsg.payload = { key, unit, data };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 320,
+        "wires": [
+            [
+                "http-res-history"
+            ]
+        ]
+    },
+    {
+        "id": "http-res-history",
+        "type": "http response",
+        "z": "barkasse-hub",
+        "name": "History response",
+        "statusCode": "",
+        "headers": {},
+        "x": 730,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "http-in-stats",
+        "type": "http in",
+        "z": "barkasse-hub",
+        "name": "GET /debug/stats",
+        "url": "/debug/stats",
+        "method": "get",
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 420,
+        "wires": [
+            [
+                "fn-stats"
+            ]
+        ]
+    },
+    {
+        "id": "fn-stats",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Build stats",
+        "func": "// Lightweight stats like FastAPI /debug/stats\n\nconst latest  = global.get(\"LATEST\")  || {};\nconst history = global.get(\"HISTORY\") || {};\n\nconst topics = Object.keys(latest).length;\nconst history_topics = Object.keys(history).length;\n\nlet history_points_total = 0;\nfor (const arr of Object.values(history)) {\n    if (Array.isArray(arr)) history_points_total += arr.length;\n}\n\nmsg.payload = {\n    topics,\n    history_topics,\n    history_points_total\n};\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 420,
+        "wires": [
+            [
+                "http-res-stats"
+            ]
+        ]
+    },
+    {
+        "id": "http-res-stats",
+        "type": "http response",
+        "z": "barkasse-hub",
+        "name": "Stats response",
+        "statusCode": "",
+        "headers": {},
+        "x": 730,
+        "y": 420,
+        "wires": []
+    }
+]
