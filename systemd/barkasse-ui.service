@@ -1,0 +1,19 @@
+# move to /etc/systemd/system/barkasse-ui.service
+
+[Unit]
+Description=Barkasse Hub UI Backend
+After=network-online.target auto-git-update.service
+Wants=network-online.target
+
+[Service]
+User=hub
+Group=hub
+WorkingDirectory=/home/hub/barkasse-hub/pi/app
+# Run via login shell so PATH/env match .venv reliably
+ExecStart=/usr/bin/env bash -lc 'source .venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 8080'
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

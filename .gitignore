@@ -2,3 +2,5 @@
 pi/mosquitto/passwd
 # Ignore Mosquitto database file
 pi/mosquitto/data/mosquitto.db
+
+.vscode

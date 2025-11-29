@@ -1,0 +1,172 @@
+/* --- Tunables --- */
+:root{
+  --tile-h: 120px;              /* topic tile height */
+  --tile-w: 200px;              /* topic tile width */
+  --topics-gap: 10px;           /* gap between tiles in scroller */
+  --scroll-thickness: 30px;     /* scrollbar thickness for #topics */
+
+  --pad-h: 32px;                /* horizontal padding around content */
+  --pad-v: 6px;                 /* vertical padding around sections */
+  --card-radius: 16px;
+  --card-bg: rgba(255,255,255,.8); /* background rgb color and transparancy can be adjusted here*/
+  --shadow: 0 6px 14px rgba(0,0,0,.15);
+}
+
+/* ===== Base / Layout ===== */
+html, body { height:100%; margin:0; }
+body { overflow:hidden; font-family:system-ui, Segoe UI, Arial, sans-serif; }
+
+#bg {
+  position:fixed; inset:0;
+  background:url('/static/assets/background.png') center/cover no-repeat;
+  filter:contrast(1.05) saturate(1.05);
+}
+#hud {
+  position:relative; z-index:2;
+  height:100vh;
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25));
+}
+
+header {
+  flex:0 0 auto;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px var(--pad-h);
+  color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);
+}
+
+/* ===== Topics strip: horizontal-only scroll, one-finger friendly ===== */
+#topics-wrap{
+  margin-top: 100px;
+  flex:0 0 auto;                   /* we’ll set exact height on #topics */
+  display:flex; flex-direction:column;
+  padding:var(--pad-v) var(--pad-h) 4px;  /* slightly tighter */
+  overflow:hidden;                  /* contain inner scroller */
+}
+
+#topics-head{
+  flex:0 0 auto;
+  color:#fff; opacity:.9; font-size:14px;
+  padding:2px 2px 6px;
+}
+
+/* Horizontal scroller sized to the tile height + scrollbar */
+#topics{
+  flex:0 0 auto;
+  display:flex; flex-direction:row; gap:var(--topics-gap);
+  overflow-x:auto; overflow-y:hidden;
+  scroll-snap-type:x proximity;
+  height:calc(var(--tile-h) + var(--scroll-thickness)); /* prevents clipping */
+  padding-bottom:25px;  /* small breathing room so scrollbar doesn’t overlap tiles */
+}
+
+/* Topic tiles (fixed size) */
+.tile{
+  flex:0 0 var(--tile-w);
+  height:var(--tile-h);
+  scroll-snap-align:start;
+
+  position:relative;
+  background:var(--card-bg);
+  border-radius:var(--card-radius);
+  padding:12px 14px;
+  box-shadow:var(--shadow);
+  cursor:grab;
+  transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
+  overflow:hidden;
+}
+.tile h3 { margin:0 0 4px 0; font-size:16px; }
+.tile .meta { color:#444; font-size:12px; opacity:.8; }
+.tile .value { font-size:32px; font-weight:700; margin-top:6px; }
+.tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
+.tile .dot {
+  position:absolute; right:10px; top:10px; width:10px; height:10px; border-radius:50%;
+  box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
+}
+.tile.dragging {
+  opacity:.9; cursor:grabbing;
+  box-shadow:0 10px 22px rgba(0,0,0,.18);
+  transform:scale(1.02);
+}
+.opacity-0 { opacity:0; transform:scale(0.95); transition:opacity .5s, transform .5s; }
+
+/* ===== Chromium scrollbar styling (only for #topics) ===== */
+#topics::-webkit-scrollbar{
+  height:var(--scroll-thickness);          /* thicker bar for touch */
+}
+#topics::-webkit-scrollbar-track{
+  background:rgba(0,0,0,.08);
+  border-radius:999px;
+  margin-inline:4px;                       /* rounded ends */
+}
+#topics::-webkit-scrollbar-thumb{
+  background:rgba(0,0,0,.35);
+  border-radius:999px;
+  border:4px solid transparent;            /* increases hit area while keeping rounded pill look */
+  background-clip:content-box;
+}
+#topics::-webkit-scrollbar-thumb:hover{
+  background:rgba(0,0,0,.5);
+  background-clip:content-box;
+}
+
+/* ===== Graphs row: two fixed graphs below topics ===== */
+#graphs{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:1fr 1fr;   /* exactly two graphs, 50% each */
+  gap:10px;                        /* closer vertical feel */
+  padding:6px var(--pad-h) var(--pad-v);
+}
+
+.graph-tile{
+  position:relative;
+  background:var(--card-bg);
+  border-radius:var(--card-radius);
+  padding:12px 14px;
+  box-shadow:var(--shadow);
+  height:320px;                  
+  display:flex; flex-direction:column; gap:10px;
+  user-select:none;             
+}
+.graph-tile .graph-header{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+}
+#graphs .chart-title{ font-weight:600; opacity:.9; }
+.graph-tile .graph-body{
+  flex:1; min-height:0;
+  display:flex; flex-direction:column; justify-content:flex-end;
+}
+.graph-tile canvas.chart{
+  flex:1; width:100%; height:100%; display:block;   /* actual pixel size set in JS */
+}
+.graph-tile .chart-hint{
+  align-self:flex-end; margin-top:6px; opacity:.7; font-size:12px;
+}
+.chart-over{ outline:2px dashed #4a90e2; border-radius:14px; }
+
+/* Period buttons */
+.periods{ display:flex; gap:6px; margin:0; }
+.periods button{
+  border:0; border-radius:999px; padding:6px 12px;
+  background:rgba(0,0,0,.08); cursor:pointer;
+}
+.periods button.active{ background:#000; color:#fff; }
+
+/* ===== Utility Trash Drop Target ===== */
+.utility-drops{
+  position:fixed; bottom:14px; right:14px;
+  display:flex; gap:10px;
+}
+.drop-target{
+  padding:10px 12px; border-radius:14px;
+  box-shadow:0 8px 18px rgba(0,0,0,.25);
+  transform:translateY(120%); transition:transform .2s ease;
+  pointer-events:none; user-select:none; color:#fff;
+}
+.drop-target.show{ transform:translateY(0); pointer-events:auto; }
+.drop-target.over{ outline:2px dashed #fff; }
+.trash{ background:rgba(255,60,60,.95); }
+
+/* No graph-create zone in this layout (legacy, not used since i decided on having 2 fixed graphs */
+.graph-create{ display:none !important; }

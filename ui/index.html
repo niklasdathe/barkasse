@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Barkasse Hub</title>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+  <div id="bg"></div>
+
+  <div id="hud">
+    <header>
+      <h1>SENSOR-HUB</h1>
+      <span id="conn">connecting…</span>
+    </header>
+
+    <!-- Topics: horizontal-only scroll -->
+    <section id="topics-wrap" aria-label="Topics">
+      <div id="topics" aria-live="polite" aria-label="Topics strip">
+        <!-- Topic tiles are injected by app.js -->
+      </div>
+    </section>
+
+    <!-- Two fixed graphs (no add/remove, not draggable) -->
+    <main id="graphs">
+      <!-- Graph #1 -->
+      <div id="graph-1" class="graph-tile" data-graph="true" aria-label="History graph 1 drop target">
+        <div class="graph-header">
+          <div class="chart-title">—</div>
+          <div class="periods" role="group" aria-label="Chart period">
+            <button data-p="1h" class="active">1h</button>
+            <button data-p="1d">1d</button>
+            <button data-p="max">max</button>
+          </div>
+        </div>
+        <div class="graph-body">
+          <canvas class="chart"></canvas>
+          <div class="chart-hint">Drag a tile here to view its history</div>
+        </div>
+      </div>
+
+      <!-- Graph #2 -->
+      <div id="graph-2" class="graph-tile" data-graph="true" aria-label="History graph 2 drop target">
+        <div class="graph-header">
+          <div class="chart-title">—</div>
+          <div class="periods" role="group" aria-label="Chart period">
+            <button data-p="1h" class="active">1h</button>
+            <button data-p="1d">1d</button>
+            <button data-p="max">max</button>
+          </div>
+        </div>
+        <div class="graph-body">
+          <canvas class="chart"></canvas>
+          <div class="chart-hint">Drag a tile here to view its history</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Utility drop target: ONLY trash -->
+    <div class="utility-drops" role="group" aria-label="Tile actions">
+      <div id="trash" class="drop-target trash" aria-label="Drop here to remove tile">🗑️ Drop to remove</div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
