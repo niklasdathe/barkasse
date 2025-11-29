@@ -2,43 +2,31 @@
 
 module.exports = {
     /***************************************************************************
-     * Flow File und Userdir
+     * Flow file / userdir
      ***************************************************************************/
     flowFile: 'flows.json',
     flowFilePretty: true,
 
     /***************************************************************************
-     * Security (vorerst alles offen – später adminAuth setzen)
-     ***************************************************************************/
-    // adminAuth: { ... },
-    // httpNodeAuth: { ... },
-    // httpStaticAuth: { ... },
-
-    /***************************************************************************
-     * Server Settings
+     * Server settings
      ***************************************************************************/
     uiPort: process.env.PORT || 1880,
-    // lauschen auf allen Interfaces 
-    // uiHost: "0.0.0.0",
 
-    // Editor-UI unter /admin
+    // Editor unter /admin
     httpAdminRoot: '/admin',
 
-    // HTTP-In-Nodes (z.B. /history, /debug/stats) unter /
+    // HTTP-In-Knoten (z.B. /history, /debug/stats) unter /
     httpNodeRoot: '/',
 
-    // Statische Dateien aus /data/ui unter /
-    // (dieser Pfad ist der Container-Pfad, auf dem Host ist es ./ui)
-    // Wenn httpStatic gesetzt ist, muss httpAdminRoot auf einen anderen Pfad
-    // gelegt werden als '/', damit die Editor-UI erreichbar bleibt. 
+    // Deine statische GUI aus /data/ui (im Container)
+    // â†’ /index.html, /styles.css, /app.js, ...
     httpStatic: '/data/ui',
 
-    // Optionales CORS für HTTP-Nodes / statische Dateien (vorerst aus)
-    // httpNodeCors: { origin: "*", methods: "GET,PUT,POST,DELETE" },
-    // httpStaticCors: { origin: "*", methods: "GET,PUT,POST,DELETE" },
+    // KEIN httpStaticRoot nÃ¶tig, weil deine HTML jetzt z.B. "styles.css" und "app.js"
+    // relativ lÃ¤dt (siehe Hinweis unten)
 
     /***************************************************************************
-     * Runtime-Einstellungen
+     * Runtime / Logging
      ***************************************************************************/
     diagnostics: {
         enabled: true,
@@ -52,7 +40,6 @@ module.exports = {
 
     telemetry: {
         // enabled: true,
-        // updateNotification: true
     },
 
     logging: {
@@ -63,61 +50,25 @@ module.exports = {
         }
     },
 
-    // Wenn später Context persistent sein soll, auskommentieren:
-    // contextStorage: {
-    //     default: {
-    //         module: "localfilesystem"
-    //     },
-    // },
-
-    exportGlobalContextKeys: false,
-
-    externalModules: {
-        // Palette/Module-Install-Optionen kannst du bei Bedarf anpassen
-    },
-
     /***************************************************************************
-     * Editor Settings
+     * Editor
      ***************************************************************************/
-    // disableEditor: false,
-
     editorTheme: {
-        palette: {
-            // categories: [...]
-        },
-        projects: {
-            enabled: false,
-            workflow: {
-                mode: "manual"
-            }
-        },
-        codeEditor: {
-            lib: "monaco",
-            options: {
-                // theme: "vs",
-            }
-        },
-        markdownEditor: {
-            mermaid: {
-                enabled: true
-            }
-        },
-        multiplayer: {
-            enabled: false
-        }
+        projects: { enabled: false, workflow: { mode: "manual" } },
+        codeEditor: { lib: "monaco", options: {} },
+        markdownEditor: { mermaid: { enabled: true } },
+        multiplayer: { enabled: false }
     },
 
     /***************************************************************************
-     * Node Settings
+     * Node settings
      ***************************************************************************/
     functionExternalModules: true,
     globalFunctionTimeout: 0,
     functionTimeout: 0,
-
     functionGlobalContext: {
         // z.B. os: require('os')
     },
-
     debugMaxLength: 1000,
     mqttReconnectTime: 15000,
     serialReconnectTime: 15000,

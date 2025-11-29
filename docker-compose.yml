@@ -4,13 +4,10 @@ services:
     container_name: barkasse-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"              # MQTT nach auﬂen
+      - "1883:1883"
     volumes:
-      # Konfiguration (mosquitto.conf, passwd, etc.)
       - ./mosquitto:/mosquitto/config
-      # Persistente Daten (Retained Messages, etc.)
       - ./mosquitto_data:/mosquitto/data
-      # Logs
       - ./mosquitto_log:/mosquitto/log
 
   nodered:
@@ -18,20 +15,11 @@ services:
     container_name: barkasse-nodered
     restart: unless-stopped
     ports:
-      - "1880:1880"              # Node-RED Editor (/admin) und Backend
+      - "1880:1880"
     environment:
       - TZ=Europe/Berlin
     volumes:
-      # Node-RED Userdir: Flows, Credentials, settings.js, Context, ...
       - ./nodered_data:/data
-      # Deine bestehende GUI (index.html, app.js, CSS, etc.)
-      # In settings.js stellst du dann z.B. httpStatic auf "/data/ui"
       - ./ui:/data/ui
     depends_on:
       - mosquitto
-
-# Optional: eigenes Netzwerk (wird automatisch angelegt)
-# networks:
-#   default:
-#     name: barkasse-net
-#     driver: bridge
