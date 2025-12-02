@@ -16,6 +16,7 @@
 // DOM elements
 const topics = document.getElementById('topics');  // Container for sensor tiles (horizontal scroll)
 const conn = document.getElementById('conn');      // Connection status indicator
+const btnClearHistory = document.getElementById('btn-clear-history'); // Clear history button
 const trash = document.getElementById('trash');   // Trash icon for deleting tiles
 
 // Constants
@@ -709,9 +710,44 @@ async function fetchHistory(k, period) {
   return r.json();
 }
 
+/**
+ * Calls the backend to clear history
+ * - If key is provided, clears only that series
+ * - Otherwise clears all history
+ */
+async function clearHistory(key = null) {
+  const url = key ? `/history/clear?key=${encodeURIComponent(key)}` : '/history/clear';
+  const r = await fetch(url, { method: 'POST' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
 /* ============================================================================
  * INITIALIZATION
  * ============================================================================ */
 
 // Start WebSocket connection when page loads
 connectWS();
+
+// Wire Clear History button
+if (btnClearHistory) {
+  btnClearHistory.addEventListener('click', async () => {
+    const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
+    if (!proceed) return;
+    try {
+      const res = await clearHistory();
+      // After clearing, force graphs to redraw (they will show "No data")
+      graphs.forEach(g => g.key && g.draw());
+      // Brief visual feedback
+      btnClearHistory.disabled = true;
+      const old = btnClearHistory.textContent;
+      btnClearHistory.textContent = 'History cleared';
+      setTimeout(() => {
+        btnClearHistory.disabled = false;
+        btnClearHistory.textContent = old;
+      }, 1500);
+    } catch (e) {
+      alert('Failed to clear history: ' + e.message);
+    }
+  });
+}

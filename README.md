@@ -80,6 +80,17 @@ Add any new sensor/cluster by publishing to the topic contract. No UI edits requ
 - Check kiosk: systemctl status chromium-kiosk.service
 - Update manually: git pull && sudo systemctl restart barkasse-ui chromium-kiosk
 
+### 1.8 Clear local history
+
+The hub keeps recent datapoints in memory to render charts. You can delete this local history if needed:
+
+- UI: Click the "Clear history" button in the top right and confirm. All stored series are removed.
+- API: Send a POST request to the hub:
+  - Clear everything: POST /history/clear
+  - Clear one series: POST /history/clear?key=<node>/<cluster>/<sensor>
+
+This only affects the in-memory cache on the Pi; live updates continue as new datapoints arrive.
+
 ## 2. Server
 
 This section describes the setup and structure of the server side.  

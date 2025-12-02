@@ -235,4 +235,53 @@
         "y": 420,
         "wires": []
     }
+    ,
+    {
+        "id": "http-in-clear-history",
+        "type": "http in",
+        "z": "barkasse-hub",
+        "name": "POST /history/clear",
+        "url": "/history/clear",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 520,
+        "wires": [
+            [
+                "fn-clear-history"
+            ]
+        ]
+    },
+    {
+        "id": "fn-clear-history",
+        "type": "function",
+        "z": "barkasse-hub",
+        "name": "Clear history",
+        "func": "const q = (msg.req && msg.req.query) || {};\nconst key = q.key || null;\nlet history = global.get(\"HISTORY\") || {};\nlet cleared = null;\nif (key) {\n    if (Object.prototype.hasOwnProperty.call(history, key)) {\n        delete history[key];\n        cleared = [key];\n    } else {\n        cleared = [];\n    }\n} else {\n    history = {};\n    cleared = \"all\";\n}\n\nglobal.set(\"HISTORY\", history);\nmsg.payload = { ok: true, cleared, history_topics: Object.keys(history).length };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 520,
+        "wires": [
+            [
+                "http-res-clear-history"
+            ]
+        ]
+    },
+    {
+        "id": "http-res-clear-history",
+        "type": "http response",
+        "z": "barkasse-hub",
+        "name": "Clear history response",
+        "statusCode": "",
+        "headers": {},
+        "x": 770,
+        "y": 520,
+        "wires": []
+    }
 ]
