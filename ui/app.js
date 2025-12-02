@@ -16,7 +16,11 @@
 // DOM elements
 const topics = document.getElementById('topics');  // Container for sensor tiles (horizontal scroll)
 const conn = document.getElementById('conn');      // Connection status indicator
-const btnClearHistory = document.getElementById('btn-clear-history'); // Clear history button
+// Header menu elements
+const headerMenuToggle = document.getElementById('header-menu-toggle');
+const headerMenu = document.getElementById('header-menu');
+const menuClearHistory = document.getElementById('menu-clear-history');
+const menuToggleKiosk = document.getElementById('menu-toggle-kiosk');
 const trash = document.getElementById('trash');   // Trash icon for deleting tiles
 
 // Constants
@@ -33,6 +37,7 @@ let reconnectTimer = null;        // Timer for reconnection attempts
 let draggedTile = null;           // Currently dragged tile element
 let menuEl = null;                // Context menu element
 let longPressTimer = null;        // Timer for tile long-press
+let kioskMode = false;            // Frontend kiosk flag
 
 /* ============================================================================
  * HELPER FUNCTIONS
@@ -787,25 +792,66 @@ async function clearHistory(key = null) {
 // Start WebSocket connection when page loads
 connectWS();
 
-// Wire Clear History button
-if (btnClearHistory) {
-  btnClearHistory.addEventListener('click', async () => {
+// ===== Header Menu wiring =====
+function setKioskMode(on) {
+  kioskMode = !!on;
+  document.body.classList.toggle('kiosk', kioskMode);
+  try {
+    localStorage.setItem('kioskMode', kioskMode ? '1' : '0');
+  } catch {}
+  // Try to request or exit fullscreen for a more kiosk-like experience
+  if (kioskMode) {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  } else {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(()=>{});
+    }
+  }
+}
+
+// Restore kiosk mode from localStorage
+try {
+  setKioskMode(localStorage.getItem('kioskMode') === '1');
+} catch {}
+
+// Toggle menu open/close
+if (headerMenuToggle && headerMenu) {
+  headerMenuToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = headerMenu.hasAttribute('hidden');
+    if (isHidden) headerMenu.removeAttribute('hidden'); else headerMenu.setAttribute('hidden', '');
+  });
+  // close on outside click
+  document.addEventListener('click', (e) => {
+    if (!headerMenu.contains(e.target) && e.target !== headerMenuToggle) {
+      headerMenu.setAttribute('hidden', '');
+    }
+  }, true);
+}
+
+// Menu: Clear history
+if (menuClearHistory) {
+  menuClearHistory.addEventListener('click', async () => {
+    headerMenu.setAttribute('hidden', '');
     const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
     if (!proceed) return;
     try {
-      const res = await clearHistory();
-      // After clearing, force graphs to redraw (they will show "No data")
+      await clearHistory();
       graphs.forEach(g => g.key && g.draw());
-      // Brief visual feedback
-      btnClearHistory.disabled = true;
-      const old = btnClearHistory.textContent;
-      btnClearHistory.textContent = 'History cleared';
-      setTimeout(() => {
-        btnClearHistory.disabled = false;
-        btnClearHistory.textContent = old;
-      }, 1500);
+      // Feedback via connection label briefly
+      const old = conn.textContent; conn.textContent = 'history cleared';
+      setTimeout(() => conn.textContent = old, 1500);
     } catch (e) {
       alert('Failed to clear history: ' + e.message);
     }
+  });
+}
+
+// Menu: Toggle kiosk mode
+if (menuToggleKiosk) {
+  menuToggleKiosk.addEventListener('click', () => {
+    headerMenu.setAttribute('hidden', '');
+    setKioskMode(!kioskMode);
   });
 }
