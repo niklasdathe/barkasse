@@ -1,59 +1,60 @@
 /* --- Tunables --- */
+/* Adjust most sizing/colors via CSS custom properties below. */
 :root{
-  --tile-h: 120px;              /* topic tile height */
-  --tile-w: 200px;              /* topic tile width */
-  --topics-gap: 10px;           /* gap between tiles in scroller */
+  --tile-h: 120px;              /* topic tile height: make tiles taller/shorter */
+  --tile-w: 200px;              /* topic tile width: fit more/fewer tiles on a row */
+  --topics-gap: 10px;           /* horizontal gap between tiles in scroller */
   --scroll-thickness: 30px;     /* scrollbar thickness for #topics */
 
-  --pad-h: 32px;                /* horizontal padding around content */
-  --pad-v: 6px;                 /* vertical padding around sections */
-  --card-radius: 16px;
-  --card-bg: rgba(255,255,255,.8); /* background rgb color and transparancy can be adjusted here*/
-  --shadow: 0 6px 14px rgba(0,0,0,.15);
+  --pad-h: 32px;                /* horizontal padding around content (left/right) */
+  --pad-v: 6px;                 /* vertical padding around sections (top/bottom) */
+  --card-radius: 16px;          /* corner radius for tiles/cards */
+  --card-bg: rgba(255,255,255,.8); /* card background + transparency (last value) */
+  --shadow: 0 6px 14px rgba(0,0,0,.15); /* card shadow strength */
 }
 
 /* ===== Base / Layout ===== */
 html, body { height:100%; margin:0; }
-body { overflow:hidden; font-family:system-ui, Segoe UI, Arial, sans-serif; }
+body { overflow:hidden; font-family:system-ui, Segoe UI, Arial, sans-serif; /* change font stack here */ }
 
 #bg {
   position:fixed; inset:0;
-  background:url('/assets/background.png') center/cover no-repeat;
-  filter:contrast(1.05) saturate(1.05);
+  background:url('/assets/background.png') center/cover no-repeat; /* swap background image path */
+  filter:contrast(1.05) saturate(1.05); /* adjust image punch/saturation */
 }
 #hud {
   position:relative; z-index:2;
   height:100vh;
   display:flex; flex-direction:column;
-  background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25));
+  background:linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.25)); /* global dark overlay strength */
 }
 
 header {
   flex:0 0 auto;
   display:flex; justify-content:space-between; align-items:center;
-  padding:10px var(--pad-h);
-  color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);
+  padding:10px var(--pad-h); /* header height/side padding */
+  color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6); /* header text color/effect */
 }
 
 .header-right{ display:flex; align-items:center; gap:10px; }
 .header-right button{
   border:0; border-radius:999px; padding:6px 12px; cursor:pointer;
-  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px);
+  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px); /* tweak button style */
 }
 .header-right button:disabled{ opacity:.7; cursor:default; }
 
 /* ===== Topics strip: horizontal-only scroll, one-finger friendly ===== */
 #topics-wrap{
-  margin-top: 100px;
+  margin-top: 100px; /* vertical offset below header */
   flex:0 0 auto;                   /* we’ll set exact height on #topics */
   display:flex; flex-direction:column;
-  padding:var(--pad-v) var(--pad-h) 4px;  /* slightly tighter */
+  padding:var(--pad-v) var(--pad-h) 4px;  /* section padding (top/right/bottom) */
   overflow:hidden;                  /* contain inner scroller */
 }
 
 #topics-head{
   flex:0 0 auto;
-  color:#fff; opacity:.9; font-size:14px;
+  color:#fff; opacity:.9; font-size:14px; /* topics label size/color */
   padding:2px 2px 6px;
 }
 
@@ -62,9 +63,9 @@ header {
   flex:0 0 auto;
   display:flex; flex-direction:row; gap:var(--topics-gap);
   overflow-x:auto; overflow-y:hidden;
-  scroll-snap-type:x proximity;
+  scroll-snap-type:x proximity; /* adjust snap feel or disable snapping */
   height:calc(var(--tile-h) + var(--scroll-thickness)); /* prevents clipping */
-  padding-bottom:25px;  /* small breathing room so scrollbar doesn’t overlap tiles */
+  padding-bottom:25px;  /* breathing room so scrollbar doesn’t overlap tiles */
 }
 
 /* Topic tiles (fixed size) */
@@ -74,10 +75,10 @@ header {
   scroll-snap-align:start;
 
   position:relative;
-  background:var(--card-bg);
-  border-radius:var(--card-radius);
+  background:var(--card-bg);       /* card color/transparency */
+  border-radius:var(--card-radius);/* card corner radius */
   padding:12px 14px;
-  box-shadow:var(--shadow);
+  box-shadow:var(--shadow);        /* card shadow */
   cursor:grab;
   transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
   overflow:hidden;
@@ -87,12 +88,12 @@ header {
   border:0; background:rgba(0,0,0,.08); color:#000; border-radius:8px;
   width:28px; height:28px; cursor:pointer;
 }
-.tile h3 { margin:0 0 4px 0; font-size:16px; }
-.tile .meta { color:#444; font-size:12px; opacity:.8; }
-.tile .value { font-size:32px; font-weight:700; margin-top:6px; }
-.tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
+.tile h3 { margin:0 0 4px 0; font-size:16px; /* tile title size */ }
+.tile .meta { color:#444; font-size:12px; opacity:.8; /* subtitle/meta color */ }
+.tile .value { font-size:32px; font-weight:700; margin-top:6px; /* main value size */ }
+.tile .unit { font-size:16px; margin-left:6px; opacity:.7; /* value unit appearance */ }
 .tile .dot {
-  position:absolute; right:44px; top:12px; width:10px; height:10px; border-radius:50%;
+  position:absolute; right:24px; bottom:12px; width:10px; height:10px; border-radius:50%;
   box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
 }
 .tile.dragging {
@@ -104,21 +105,21 @@ header {
 
 /* ===== Chromium scrollbar styling (only for #topics) ===== */
 #topics::-webkit-scrollbar{
-  height:var(--scroll-thickness);          /* thicker bar for touch */
+  height:var(--scroll-thickness);          /* scrollbar height (thickness) */
 }
 #topics::-webkit-scrollbar-track{
-  background:rgba(0,0,0,.08);
+  background:rgba(0,0,0,.08);              /* track color */
   border-radius:999px;
   margin-inline:4px;                       /* rounded ends */
 }
 #topics::-webkit-scrollbar-thumb{
-  background:rgba(0,0,0,.35);
+  background:rgba(0,0,0,.35);              /* thumb color */
   border-radius:999px;
   border:4px solid transparent;            /* increases hit area while keeping rounded pill look */
   background-clip:content-box;
 }
 #topics::-webkit-scrollbar-thumb:hover{
-  background:rgba(0,0,0,.5);
+  background:rgba(0,0,0,.5);               /* hover color */
   background-clip:content-box;
 }
 
@@ -126,9 +127,9 @@ header {
 #graphs{
   flex:0 0 auto;
   display:grid;
-  grid-template-columns:1fr 1fr;   /* exactly two graphs, 50% each */
+  grid-template-columns:1fr 1fr;   /* two graphs, 50% each (use 1fr for single column) */
   gap:10px;                        /* closer vertical feel */
-  padding:6px var(--pad-h) var(--pad-v);
+  padding:6px var(--pad-h) var(--pad-v); /* section padding */
 }
 
 .graph-tile{
@@ -137,14 +138,14 @@ header {
   border-radius:var(--card-radius);
   padding:12px 14px;
   box-shadow:var(--shadow);
-  height:320px;                  
+  height:320px;                  /* graph tile height */
   display:flex; flex-direction:column; gap:10px;
   user-select:none;             
 }
 .graph-tile .graph-header{
   display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
 }
-#graphs .chart-title{ font-weight:600; opacity:.9; }
+#graphs .chart-title{ font-weight:600; opacity:.9; /* chart title emphasis */ }
 .graph-tile .graph-body{
   flex:1; min-height:0;
   display:flex; flex-direction:column; justify-content:flex-end;
@@ -161,14 +162,14 @@ header {
 .periods{ display:flex; gap:6px; margin:0; }
 .periods button{
   border:0; border-radius:999px; padding:6px 12px;
-  background:rgba(0,0,0,.08); cursor:pointer;
+  background:rgba(0,0,0,.08); cursor:pointer; /* adjust default button fill */
 }
-.periods button.active{ background:#000; color:#fff; }
+.periods button.active{ background:#000; color:#fff; /* active state color (brand) */ }
 
 /* ===== Utility Trash Drop Target ===== */
 .utility-drops{
   position:fixed; bottom:14px; right:14px;
-  display:flex; gap:10px;
+  display:flex; gap:10px; /* spacing between utility chips */
 }
 .drop-target{
   padding:10px 12px; border-radius:14px;
@@ -178,7 +179,7 @@ header {
 }
 .drop-target.show{ transform:translateY(0); pointer-events:auto; }
 .drop-target.over{ outline:2px dashed #fff; }
-.trash{ background:rgba(255,60,60,.95); }
+.trash{ background:rgba(255,60,60,.95); /* trash chip color */ }
 
 /* No graph-create zone in this layout (legacy, not used since i decided on having 2 fixed graphs */
 .graph-create{ display:none !important; }
@@ -189,7 +190,7 @@ header {
   background:var(--card-bg);
   box-shadow:0 10px 24px rgba(0,0,0,.25);
   border-radius:12px;
-  padding:8px;
+  padding:8px; /* menu padding (inside) */
 }
 .tile-menu .menu-item{
   display:block; width:100%;
@@ -197,5 +198,5 @@ header {
   padding:8px 10px; border-radius:8px; text-align:left;
 }
 .tile-menu .menu-item:hover{
-  background:rgba(0,0,0,.08);
+  background:rgba(0,0,0,.08); /* hover color */
 }
