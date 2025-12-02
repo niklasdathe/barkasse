@@ -32,7 +32,7 @@ This section describes the setup and structure of the on board hub.
 | `example-sensor-implementations/esp32-wroom-waterstation-mock`| ESP32 WROOM (WiFi) demo publishing water data    |
 | `pi/docker-compose.yml` | Mosquitto MQTT broker                                  |
 | `pi/app/`               | FastAPI backend with WebSocket + static touchscreen UI |
-| `systemd/`              | Auto-update, backend, and kiosk startup services       |
+| `systemd/`              | Auto-update, backend, and Chromium startup services    |
 
 
 ### 1.4 Setup on Raspberry Pi
@@ -55,12 +55,12 @@ pip install -r requirements.txt
 ```bash
 sudo cp systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now auto-git-update.service barkasse-ui.service chromium-kiosk.service
+sudo systemctl enable --now auto-git-update.service barkasse-ui.service kiosk-chromium.service
 ```
 
-**Kiosk Mode**
+**Chromium Fullscreen Startup**
 
-- Chromium launches automatically in fullscreen Wayland mode.  
+- Chromium launches automatically in fullscreen Wayland mode (not strict kiosk).  
 - The UI is served at http://localhost:8080.  
 
 ### 1.5 Implementation Examples
@@ -77,8 +77,8 @@ Add any new sensor/cluster by publishing to the topic contract. No UI edits requ
 ### 1.7 Maintenance
 
 - Check backend: systemctl status barkasse-ui.service
-- Check kiosk: systemctl status chromium-kiosk.service
-- Update manually: git pull && sudo systemctl restart barkasse-ui chromium-kiosk
+- Check browser: systemctl status kiosk-chromium.service
+- Update manually: git pull && sudo systemctl restart barkasse-ui kiosk-chromium
 
 ### 1.8 UI menu (clear history & fullscreen)
 
@@ -93,7 +93,7 @@ This only affects the in-memory cache on the Pi; live updates continue as new da
 
 #### Fullscreen vs kiosk
 
-Chromium is configured to start in kiosk mode by default via systemd. From the UI menu you can temporarily exit kiosk-like constraints by toggling fullscreen on/off. If you prefer launching Chromium without strict kiosk flags and rely on UI fullscreen instead, adjust `systemd/kiosk-chromium.service` accordingly.
+Chromium is configured to start in fullscreen by default via systemd (no kiosk flags). From the UI menu you can toggle fullscreen on/off when needed. Service file: `systemd/kiosk-chromium.service`.
 
 ## 2. Server
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Barkasse Chromium Kiosk (Wayland/Xwayland)
+Description=Barkasse Chromium (Fullscreen, Wayland/Xwayland)
 After=graphical.target systemd-logind.service barkasse-ui.service
 Wants=graphical.target barkasse-ui.service
 
@@ -20,7 +20,7 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do [ -S /run/user/1000/wayland-0 
 # This avoids Chromium launching before FastAPI/uvicorn is ready, which caused intermittent "localhost refused to connect" at boot.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 80); do curl -sSf http://localhost:8080 >/dev/null 2>&1 && exit 0; sleep 0.25; done; echo "UI backend not reachable on :8080"; exit 1'
 
-# Chromium flags for stable kiosk on Wayland
+# Chromium flags for stable fullscreen on Wayland (no kiosk mode)
 ExecStart=/usr/bin/chromium-browser \
   --incognito --start-fullscreen \
   --no-first-run --no-default-browser-check --noerrdialogs --disable-infobars --disable-logging \
