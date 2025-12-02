@@ -1,0 +1,42 @@
+// Simple Plymouth script theme: shows a full-screen background image and an optional status text.
+// Copy your background image as /usr/share/plymouth/themes/barkasse/background.png
+
+fun draw_message(msg) {
+    // White, slightly transparent text centered at bottom
+    tex = Plymouth.SetText(msg)
+    Plymouth.SetFont("Sans 24")
+    Plymouth.SetTextColor(1.0, 1.0, 1.0) // white
+    Plymouth.SetTextOpacity(0.85)
+    tw = Plymouth.GetTextWidth(tex)
+    th = Plymouth.GetTextHeight(tex)
+    Plymouth.DrawText(tex, (Window.GetWidth() - tw)/2, Window.GetHeight() - th - 48)
+}
+
+// Called when theme is loaded
+fun script_main() {
+    // Load background
+    bg = Image("background.png")
+    if (bg) {
+        // Scale to cover screen
+        scaleX = Window.GetWidth() / Image.GetWidth(bg)
+        scaleY = Window.GetHeight() / Image.GetHeight(bg)
+        scale = (scaleX > scaleY) ? scaleX : scaleY
+        Image.SetScale(bg, scale, scale)
+        // Center
+        x = (Window.GetWidth() - Image.GetWidth(bg)) / 2
+        y = (Window.GetHeight() - Image.GetHeight(bg)) / 2
+        Plymouth.DrawImage(bg, x, y)
+    }
+
+    // Optional: show boot messages suppressed, but we can draw a friendly message
+    draw_message("Starting Barkasse…")
+}
+
+// Hook to update status messages if shown
+fun message_callback(msg) {
+    // Clear area and redraw message
+    Plymouth.SetBackgroundColor(0,0,0,0) // no clear; background persists
+    draw_message(msg)
+}
+
+Plymouth.SetUpdateFunction(message_callback)
