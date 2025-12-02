@@ -177,3 +177,20 @@ header {
 
 /* No graph-create zone in this layout (legacy, not used since i decided on having 2 fixed graphs */
 .graph-create{ display:none !important; }
+
+/* ===== Tile contextual menu ===== */
+.tile-menu{
+  position:fixed; z-index:1000;
+  background:var(--card-bg);
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+  border-radius:12px;
+  padding:8px;
+}
+.tile-menu .menu-item{
+  display:block; width:100%;
+  border:0; background:transparent; cursor:pointer; color:#000;
+  padding:8px 10px; border-radius:8px; text-align:left;
+}
+.tile-menu .menu-item:hover{
+  background:rgba(0,0,0,.08);
+}

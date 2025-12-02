@@ -31,6 +31,8 @@ const mutedUntilNextUpdate = new Set();  // Tracks tiles that should be hidden u
 let ws = null;                    // WebSocket connection
 let reconnectTimer = null;        // Timer for reconnection attempts
 let draggedTile = null;           // Currently dragged tile element
+let menuEl = null;                // Context menu element
+let longPressTimer = null;        // Timer for tile long-press
 
 /* ============================================================================
  * HELPER FUNCTIONS
@@ -161,6 +163,29 @@ function ensureTile(o) {
         disableDrag();
       });
     }
+
+    // Context menu: right-click (mouse) opens actions, and long-press (touch) too
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openTileMenu(el, e.clientX, e.clientY);
+    });
+
+    // Long-press to open menu on touch
+    el.addEventListener('touchstart', (e) => {
+      // only single-finger
+      if (e.touches && e.touches.length === 1) {
+        longPressTimer = setTimeout(() => {
+          const t = e.touches[0];
+          openTileMenu(el, t.clientX, t.clientY);
+        }, 600);
+      }
+    }, { passive: true });
+    el.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+    el.addEventListener('touchmove', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
   }
 
   // Update tile content with sensor data
@@ -170,6 +195,66 @@ function ensureTile(o) {
   el.querySelector('.ts').textContent = o.ts || '';
 
   return el;
+}
+
+/**
+ * Opens a small context menu for a tile with actions like "Clear history"
+ */
+function openTileMenu(tile, clientX, clientY) {
+  closeTileMenu();
+  const k = tile.dataset.k;
+  if (!k) return;
+
+  menuEl = document.createElement('div');
+  menuEl.className = 'tile-menu';
+  menuEl.innerHTML = `
+    <button class="menu-item" data-action="clear" aria-label="Clear history for this tile">Clear history…</button>
+  `;
+
+  // Position near cursor/touch
+  menuEl.style.left = Math.max(8, clientX) + 'px';
+  menuEl.style.top = Math.max(8, clientY) + 'px';
+
+  document.body.appendChild(menuEl);
+
+  // Outside click closes
+  const onDocClick = (e) => {
+    if (menuEl && !menuEl.contains(e.target)) {
+      closeTileMenu();
+      document.removeEventListener('click', onDocClick, true);
+    }
+  };
+  document.addEventListener('click', onDocClick, true);
+
+  // Handle menu actions
+  menuEl.querySelector('[data-action="clear"]').addEventListener('click', async () => {
+    closeTileMenu();
+    const proceed = confirm(`Delete history for ${k}?`);
+    if (!proceed) return;
+    try {
+      await clearHistory(k);
+      // Redraw graphs that show this key
+      graphs.forEach(gt => {
+        if (gt.key === k) gt.draw();
+      });
+      // Brief feedback on tile
+      const num = tile.querySelector('.num');
+      if (num) {
+        const old = num.textContent;
+        num.textContent = '—';
+        setTimeout(() => { num.textContent = old; }, 1200);
+      }
+    } catch (e) {
+      alert('Failed to clear history: ' + e.message);
+    }
+  });
+}
+
+function closeTileMenu() {
+  if (menuEl) {
+    menuEl.remove();
+    menuEl = null;
+  }
 }
 
 /**
