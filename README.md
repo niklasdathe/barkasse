@@ -91,6 +91,29 @@ The hub keeps recent datapoints in memory to render charts. You can delete this 
 
 This only affects the in-memory cache on the Pi; live updates continue as new datapoints arrive.
 
+### 1.9 Kiosk mode toggle
+
+The device should always boot into kiosk mode for a simple, locked-down UI. Sometimes you may want to temporarily exit kiosk mode on the Pi to configure Wi‑Fi or other settings using the touch screen. The UI provides a "Toggle kiosk mode" item in the top-right menu.
+
+Recommended wiring:
+
+- Keep `kiosk-chromium.service` enabled so the device boots into kiosk by default.
+- Expose a local endpoint on the hub (e.g., with FastAPI or Node‑RED) at `POST /system/kiosk` with JSON `{ "mode": "on" | "off" }`.
+- Implement the endpoint to:
+  - `mode=off`: stop `kiosk-chromium.service`, and optionally start a normal Chromium session without `--kiosk` or provide a desktop/terminal.
+  - `mode=on`: (re)start `kiosk-chromium.service` to return to full kiosk.
+
+Example with Node‑RED:
+
+- Add an HTTP-In node for `POST /system/kiosk`.
+- Use an exec node to run `sudo systemctl stop kiosk-chromium.service` when `mode=off` and `sudo systemctl start kiosk-chromium.service` when `mode=on`.
+- Return 200 OK on success.
+
+Frontend behavior:
+
+- The menu button sends `POST /system/kiosk` and also stores a local preference in `localStorage` (`kioskMode = on|off`) as a hint.
+- If the endpoint is not available, the UI will still set the local flag and inform the user, but the actual system kiosk state must be changed via service control.
+
 ## 2. Server
 
 This section describes the setup and structure of the server side.  

@@ -39,33 +39,26 @@ header {
 .header-right{ display:flex; align-items:center; gap:10px; }
 .header-right button{
   border:0; border-radius:999px; padding:6px 12px; cursor:pointer;
-  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px);
+  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px); /* tweak button style */
 }
 .header-right button:disabled{ opacity:.7; cursor:default; }
 
 /* Header menu (top-right) */
 .header-menu{ position:relative; }
 #header-menu-toggle{
-  width:36px; height:36px; padding:0; border-radius:10px;
-  background:rgba(255,255,255,.2); color:#fff; cursor:pointer;
+  border:0; border-radius:8px; width:32px; height:32px; cursor:pointer;
+  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px);
 }
-.header-menu .menu{
-  position:absolute; right:0; top:42px; z-index:1000;
-  min-width:200px; background:var(--card-bg); color:#000;
-  border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.25);
+#header-menu{
+  position:absolute; right:0; top:36px; min-width:180px;
+  background:var(--card-bg); border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.25);
   padding:8px;
 }
-.header-menu .menu-item{
-  display:block; width:100%; text-align:left; cursor:pointer;
-  border:0; background:transparent; padding:8px 10px; border-radius:8px; color:#000;
+#header-menu .menu-item{
+  display:block; width:100%; border:0; background:transparent; cursor:pointer; color:#000;
+  padding:8px 10px; border-radius:8px; text-align:left;
 }
-.header-menu .menu-item:hover{ background:rgba(0,0,0,.08); }
-
-/* Kiosk mode tweaks */
-.kiosk body, body.kiosk{ cursor:none; }
-body.kiosk .utility-drops{ display:none; }
-body.kiosk .tile-actions{ display:none; }
-body.kiosk .periods button{ pointer-events:none; opacity:.6; }
+#header-menu .menu-item:hover{ background:rgba(0,0,0,.08); }
 
 /* ===== Topics strip: horizontal-only scroll, one-finger friendly ===== */
 #topics-wrap{
@@ -117,7 +110,7 @@ body.kiosk .periods button{ pointer-events:none; opacity:.6; }
 .tile .value { font-size:32px; font-weight:700; margin-top:6px; /* main value size */ }
 .tile .unit { font-size:16px; margin-left:6px; opacity:.7; /* value unit appearance */ }
 .tile .dot {
-  position:absolute; right:44px; top:12px; width:10px; height:10px; border-radius:50%;
+  position:absolute; right:8px; top:40px; width:10px; height:10px; border-radius:50%;
   box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
 }
 .tile.dragging {

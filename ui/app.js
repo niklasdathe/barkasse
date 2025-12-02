@@ -37,7 +37,6 @@ let reconnectTimer = null;        // Timer for reconnection attempts
 let draggedTile = null;           // Currently dragged tile element
 let menuEl = null;                // Context menu element
 let longPressTimer = null;        // Timer for tile long-press
-let kioskMode = false;            // Frontend kiosk flag
 
 /* ============================================================================
  * HELPER FUNCTIONS
@@ -792,66 +791,65 @@ async function clearHistory(key = null) {
 // Start WebSocket connection when page loads
 connectWS();
 
-// ===== Header Menu wiring =====
-function setKioskMode(on) {
-  kioskMode = !!on;
-  document.body.classList.toggle('kiosk', kioskMode);
-  try {
-    localStorage.setItem('kioskMode', kioskMode ? '1' : '0');
-  } catch {}
-  // Try to request or exit fullscreen for a more kiosk-like experience
-  if (kioskMode) {
-    const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
-  } else {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(()=>{});
-    }
-  }
-}
-
-// Restore kiosk mode from localStorage
-try {
-  setKioskMode(localStorage.getItem('kioskMode') === '1');
-} catch {}
-
-// Toggle menu open/close
+// Header menu behavior
 if (headerMenuToggle && headerMenu) {
+  const closeOnOutside = (e) => {
+    if (headerMenu && !headerMenu.contains(e.target) && e.target !== headerMenuToggle) {
+      headerMenu.hidden = true;
+      document.removeEventListener('click', closeOnOutside, true);
+    }
+  };
+
   headerMenuToggle.addEventListener('click', (e) => {
     e.stopPropagation();
-    const isHidden = headerMenu.hasAttribute('hidden');
-    if (isHidden) headerMenu.removeAttribute('hidden'); else headerMenu.setAttribute('hidden', '');
-  });
-  // close on outside click
-  document.addEventListener('click', (e) => {
-    if (!headerMenu.contains(e.target) && e.target !== headerMenuToggle) {
-      headerMenu.setAttribute('hidden', '');
+    const isHidden = headerMenu.hidden;
+    headerMenu.hidden = !isHidden;
+    if (!headerMenu.hidden) {
+      document.addEventListener('click', closeOnOutside, true);
     }
-  }, true);
+  });
 }
 
-// Menu: Clear history
+// Clear history from header menu
 if (menuClearHistory) {
   menuClearHistory.addEventListener('click', async () => {
-    headerMenu.setAttribute('hidden', '');
+    headerMenu && (headerMenu.hidden = true);
     const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
     if (!proceed) return;
     try {
       await clearHistory();
       graphs.forEach(g => g.key && g.draw());
-      // Feedback via connection label briefly
-      const old = conn.textContent; conn.textContent = 'history cleared';
-      setTimeout(() => conn.textContent = old, 1500);
+      alert('History cleared.');
     } catch (e) {
       alert('Failed to clear history: ' + e.message);
     }
   });
 }
 
-// Menu: Toggle kiosk mode
+// Toggle kiosk mode (frontend -> backend hook)
 if (menuToggleKiosk) {
-  menuToggleKiosk.addEventListener('click', () => {
-    headerMenu.setAttribute('hidden', '');
-    setKioskMode(!kioskMode);
+  menuToggleKiosk.addEventListener('click', async () => {
+    headerMenu && (headerMenu.hidden = true);
+
+    // Determine desired mode based on local flag; default is kiosk ON
+    const current = localStorage.getItem('kioskMode') || 'on';
+    const next = current === 'on' ? 'off' : 'on';
+
+    // Try calling backend (optional) to switch system kiosk
+    try {
+      const r = await fetch('/system/kiosk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: next })
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch (e) {
+      // If backend not available, proceed with local flag and inform the user
+      console.warn('Backend kiosk toggle failed or missing:', e);
+    }
+
+    // Persist local preference and inform user
+    localStorage.setItem('kioskMode', next);
+    alert(`Kiosk mode set to: ${next}. If running in Chromium kiosk, the system service will handle full-screen and input lock on next restart.`);
   });
 }
