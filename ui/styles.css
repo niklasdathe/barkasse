@@ -82,12 +82,17 @@ header {
   transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
   overflow:hidden;
 }
+.tile .tile-actions{
+  position:absolute; right:8px; top:8px;
+  border:0; background:rgba(0,0,0,.08); color:#000; border-radius:8px;
+  width:28px; height:28px; cursor:pointer;
+}
 .tile h3 { margin:0 0 4px 0; font-size:16px; }
 .tile .meta { color:#444; font-size:12px; opacity:.8; }
 .tile .value { font-size:32px; font-weight:700; margin-top:6px; }
 .tile .unit { font-size:16px; margin-left:6px; opacity:.7; }
 .tile .dot {
-  position:absolute; right:10px; top:10px; width:10px; height:10px; border-radius:50%;
+  position:absolute; right:44px; top:12px; width:10px; height:10px; border-radius:50%;
   box-shadow:0 0 0 2px rgba(0,0,0,.08) inset, 0 1px 2px rgba(0,0,0,.25);
 }
 .tile.dragging {

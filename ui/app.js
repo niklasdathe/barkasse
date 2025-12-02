@@ -94,6 +94,7 @@ function ensureTile(o) {
     el.dataset.k = k;
     el.innerHTML = `
       <span class="dot" aria-hidden="true"></span>
+      <button class="tile-actions" aria-label="Tile actions" title="Actions">⋮</button>
       <h3>${o.cluster} / ${o.sensor}</h3>
       <div class="meta node"></div>
       <div class="value"><span class="num">—</span><span class="unit"></span></div>
@@ -106,7 +107,7 @@ function ensureTile(o) {
 
     // Setup drag & drop based on input device type
     const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-    
+
     if (!isCoarse) {
       // Mouse/precision pointer: enable drag immediately
       el.setAttribute('draggable', 'true');
@@ -123,46 +124,8 @@ function ensureTile(o) {
       }
     });
 
-    // Touch-friendly drag: enable only after long-press (~400ms)
-    if (isCoarse) {
-      let lpTimer = null;
-
-      const enableDrag = () => {
-        el.setAttribute('draggable', 'true');
-        el.classList.add('drag-ready');
-      };
-
-      const disableDrag = () => {
-        el.removeAttribute('draggable');
-        el.classList.remove('drag-ready');
-      };
-
-      // Start long-press timer on touch start
-      el.addEventListener('touchstart', () => {
-        lpTimer = setTimeout(enableDrag, 400);
-      }, { passive: true });
-
-      // Cancel drag activation if user scrolls
-      el.addEventListener('touchmove', () => {
-        clearTimeout(lpTimer);
-      }, { passive: true });
-
-      // Clean up after touch ends
-      el.addEventListener('touchend', () => {
-        clearTimeout(lpTimer);
-        // If drag didn't happen, disable drag after short delay
-        setTimeout(() => {
-          if (!el.classList.contains('dragging')) {
-            disableDrag();
-          }
-        }, 50);
-      }, { passive: true });
-
-      // Disable drag after drag completes (so scrolling stays smooth)
-      el.addEventListener('dragend', () => {
-        disableDrag();
-      });
-    }
+    // On touch devices, we do NOT enable drag via long-press anymore;
+    // use the actions button or long-press to open the menu instead.
 
     // Context menu: right-click (mouse) opens actions, and long-press (touch) too
     el.addEventListener('contextmenu', (e) => {
@@ -186,6 +149,16 @@ function ensureTile(o) {
     el.addEventListener('touchmove', () => {
       clearTimeout(longPressTimer);
     }, { passive: true });
+
+    // Actions button click
+    const actionsBtn = el.querySelector('.tile-actions');
+    if (actionsBtn) {
+      actionsBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const rect = actionsBtn.getBoundingClientRect();
+        openTileMenu(el, rect.left + rect.width / 2, rect.bottom);
+      });
+    }
   }
 
   // Update tile content with sensor data
