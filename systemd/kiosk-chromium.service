@@ -22,7 +22,7 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 80); do curl -sSf http://localhost:808
 
 # Chromium flags for stable kiosk on Wayland
 ExecStart=/usr/bin/chromium-browser \
-  --kiosk --incognito --start-fullscreen \
+  --incognito --start-fullscreen \
   --no-first-run --no-default-browser-check --noerrdialogs --disable-infobars --disable-logging \
   --enable-features=UseOzonePlatform --ozone-platform=wayland \
   --app=http://localhost:8080

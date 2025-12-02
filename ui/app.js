@@ -16,11 +16,7 @@
 // DOM elements
 const topics = document.getElementById('topics');  // Container for sensor tiles (horizontal scroll)
 const conn = document.getElementById('conn');      // Connection status indicator
-// Header menu elements
-const headerMenuToggle = document.getElementById('header-menu-toggle');
-const headerMenu = document.getElementById('header-menu');
-const menuClearHistory = document.getElementById('menu-clear-history');
-const menuToggleKiosk = document.getElementById('menu-toggle-kiosk');
+const headerMenuBtn = document.getElementById('header-menu-btn'); // Top-right header menu button
 const trash = document.getElementById('trash');   // Trash icon for deleting tiles
 
 // Constants
@@ -231,6 +227,80 @@ function closeTileMenu() {
   if (menuEl) {
     menuEl.remove();
     menuEl = null;
+  }
+}
+
+/* ============================================================================
+ * HEADER MENU (Clear history + Fullscreen toggle)
+ * ============================================================================ */
+
+let headerMenuEl = null;
+
+function openHeaderMenu(anchorBtn) {
+  closeHeaderMenu();
+  headerMenuEl = document.createElement('div');
+  headerMenuEl.className = 'tile-menu';
+  headerMenuEl.innerHTML = `
+    <button class="menu-item" data-action="clear-all" aria-label="Clear all history">Clear history…</button>
+    <button class="menu-item" data-action="toggle-fullscreen" aria-label="Toggle fullscreen">Toggle fullscreen</button>
+  `;
+
+  // Position below the anchor button
+  const rect = anchorBtn.getBoundingClientRect();
+  headerMenuEl.style.left = (rect.right - 160) + 'px'; // align to right-ish
+  headerMenuEl.style.top = (rect.bottom + 4) + 'px';
+
+  document.body.appendChild(headerMenuEl);
+
+  const onDocClick = (e) => {
+    if (headerMenuEl && !headerMenuEl.contains(e.target) && e.target !== anchorBtn) {
+      closeHeaderMenu();
+      document.removeEventListener('click', onDocClick, true);
+    }
+  };
+  document.addEventListener('click', onDocClick, true);
+
+  // Actions
+  headerMenuEl.querySelector('[data-action="clear-all"]').addEventListener('click', async () => {
+    closeHeaderMenu();
+    const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
+    if (!proceed) return;
+    try {
+      await clearHistory();
+      graphs.forEach(g => g.key && g.draw());
+    } catch (e) {
+      alert('Failed to clear history: ' + e.message);
+    }
+  });
+
+  headerMenuEl.querySelector('[data-action="toggle-fullscreen"]').addEventListener('click', async () => {
+    closeHeaderMenu();
+    try {
+      await toggleFullscreen();
+    } catch (e) {
+      alert('Fullscreen toggle failed: ' + e.message);
+    }
+  });
+}
+
+function closeHeaderMenu() {
+  if (headerMenuEl) {
+    headerMenuEl.remove();
+    headerMenuEl = null;
+  }
+}
+
+async function toggleFullscreen() {
+  const el = document.documentElement; // use the root for full coverage
+  const isFs = !!document.fullscreenElement;
+  if (!isFs) {
+    if (el.requestFullscreen) {
+      await el.requestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+    }
   }
 }
 
@@ -791,65 +861,10 @@ async function clearHistory(key = null) {
 // Start WebSocket connection when page loads
 connectWS();
 
-// Header menu behavior
-if (headerMenuToggle && headerMenu) {
-  const closeOnOutside = (e) => {
-    if (headerMenu && !headerMenu.contains(e.target) && e.target !== headerMenuToggle) {
-      headerMenu.hidden = true;
-      document.removeEventListener('click', closeOnOutside, true);
-    }
-  };
-
-  headerMenuToggle.addEventListener('click', (e) => {
+// Wire header menu button
+if (headerMenuBtn) {
+  headerMenuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const isHidden = headerMenu.hidden;
-    headerMenu.hidden = !isHidden;
-    if (!headerMenu.hidden) {
-      document.addEventListener('click', closeOnOutside, true);
-    }
-  });
-}
-
-// Clear history from header menu
-if (menuClearHistory) {
-  menuClearHistory.addEventListener('click', async () => {
-    headerMenu && (headerMenu.hidden = true);
-    const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
-    if (!proceed) return;
-    try {
-      await clearHistory();
-      graphs.forEach(g => g.key && g.draw());
-      alert('History cleared.');
-    } catch (e) {
-      alert('Failed to clear history: ' + e.message);
-    }
-  });
-}
-
-// Toggle kiosk mode (frontend -> backend hook)
-if (menuToggleKiosk) {
-  menuToggleKiosk.addEventListener('click', async () => {
-    headerMenu && (headerMenu.hidden = true);
-
-    // Determine desired mode based on local flag; default is kiosk ON
-    const current = localStorage.getItem('kioskMode') || 'on';
-    const next = current === 'on' ? 'off' : 'on';
-
-    // Try calling backend (optional) to switch system kiosk
-    try {
-      const r = await fetch('/system/kiosk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: next })
-      });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-    } catch (e) {
-      // If backend not available, proceed with local flag and inform the user
-      console.warn('Backend kiosk toggle failed or missing:', e);
-    }
-
-    // Persist local preference and inform user
-    localStorage.setItem('kioskMode', next);
-    alert(`Kiosk mode set to: ${next}. If running in Chromium kiosk, the system service will handle full-screen and input lock on next restart.`);
+    openHeaderMenu(headerMenuBtn);
   });
 }

@@ -80,39 +80,20 @@ Add any new sensor/cluster by publishing to the topic contract. No UI edits requ
 - Check kiosk: systemctl status chromium-kiosk.service
 - Update manually: git pull && sudo systemctl restart barkasse-ui chromium-kiosk
 
-### 1.8 Clear local history
+### 1.8 UI menu (clear history & fullscreen)
 
 The hub keeps recent datapoints in memory to render charts. You can delete this local history if needed:
 
-- UI: Click the "Clear history" button in the top right and confirm. All stored series are removed.
+- UI: Use the top-right menu (⋮) and choose "Clear history". All stored series are removed.
 - API: Send a POST request to the hub:
   - Clear everything: POST /history/clear
   - Clear one series: POST /history/clear?key=<node>/<cluster>/<sensor>
 
 This only affects the in-memory cache on the Pi; live updates continue as new datapoints arrive.
 
-### 1.9 Kiosk mode toggle
+#### Fullscreen vs kiosk
 
-The device should always boot into kiosk mode for a simple, locked-down UI. Sometimes you may want to temporarily exit kiosk mode on the Pi to configure Wi‑Fi or other settings using the touch screen. The UI provides a "Toggle kiosk mode" item in the top-right menu.
-
-Recommended wiring:
-
-- Keep `kiosk-chromium.service` enabled so the device boots into kiosk by default.
-- Expose a local endpoint on the hub (e.g., with FastAPI or Node‑RED) at `POST /system/kiosk` with JSON `{ "mode": "on" | "off" }`.
-- Implement the endpoint to:
-  - `mode=off`: stop `kiosk-chromium.service`, and optionally start a normal Chromium session without `--kiosk` or provide a desktop/terminal.
-  - `mode=on`: (re)start `kiosk-chromium.service` to return to full kiosk.
-
-Example with Node‑RED:
-
-- Add an HTTP-In node for `POST /system/kiosk`.
-- Use an exec node to run `sudo systemctl stop kiosk-chromium.service` when `mode=off` and `sudo systemctl start kiosk-chromium.service` when `mode=on`.
-- Return 200 OK on success.
-
-Frontend behavior:
-
-- The menu button sends `POST /system/kiosk` and also stores a local preference in `localStorage` (`kioskMode = on|off`) as a hint.
-- If the endpoint is not available, the UI will still set the local flag and inform the user, but the actual system kiosk state must be changed via service control.
+Chromium is configured to start in kiosk mode by default via systemd. From the UI menu you can temporarily exit kiosk-like constraints by toggling fullscreen on/off. If you prefer launching Chromium without strict kiosk flags and rely on UI fullscreen instead, adjust `systemd/kiosk-chromium.service` accordingly.
 
 ## 2. Server
 
