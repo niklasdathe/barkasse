@@ -20,7 +20,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-#include "secrets.h"         // define MQTT broker/user/pass etc.
+#include "../includes/secrets.h"         // define MQTT broker/user/pass etc.
 
 // ------------------- Node identity -------------------
 static const char* NODE_ID    = "esp32p4-01";
@@ -30,7 +30,9 @@ static const char* CLUSTER_ID = "weather";
 WiFiClient ethClient;
 PubSubClient mqtt(ethClient);
 
-static const char* TOPIC_STATUS  = "barkasse/esp32p4-01/status";
+static const uint16_t MQTT_BUFFER_SIZE = 1024;
+static unsigned long nextMqttAttemptMs = 0;
+
 static const char* TOPIC_BASE    = "barkasse/esp32p4-01/weather/";      // + <sensor>
 static const char* TOPIC_CLUSTER = "barkasse/esp32p4-01/weather/state"; // summary
 
@@ -47,6 +49,22 @@ bool isTimeValid() {
   return (now > 1672531200); // After 2023-01-01 means NTP synced
 }
 
+static unsigned long lastNtpAttemptMs = 0;
+
+// Ethernet link state (set by WiFiEvent handler)
+static bool eth_connected = false;
+
+void ensureTimeSynced() {
+  if (!eth_connected) return;
+  if (isTimeValid()) return;
+  const unsigned long nowMs = millis();
+  // Retry periodically so it recovers after replug / hub boot order issues
+  if (nowMs - lastNtpAttemptMs < 30000UL) return; // 30s
+  lastNtpAttemptMs = nowMs;
+  Serial.println("[NTP] Attempting time sync...");
+  configTime(0, 0, NTP_HOST);
+}
+
 String isoNow() {
   time_t now; time(&now);
   struct tm t; gmtime_r(&now, &t);
@@ -59,8 +77,9 @@ String isoNow() {
 void publishJson(const String& topic, const JsonDocument& doc, bool retained=false) {
   static char buf[768];
   size_t n = serializeJson(doc, buf, sizeof(buf));
-  mqtt.publish(topic.c_str(), retained, buf);
+  mqtt.publish(topic.c_str(), (const uint8_t*)buf, n, retained);
 }
+
 
 void publishSensor(const char* sensor, float value, const char* unit) {
   StaticJsonDocument<256> doc;
@@ -98,17 +117,21 @@ float jitter(float v, float step, float minv, float maxv) {
 
 // ------------------- MQTT connect ---------------------
 void mqttConnect() {
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  // Last Will: report "offline" retained
-  mqtt.connect(NODE_ID, MQTT_USER, MQTT_PASS, TOPIC_STATUS, 1, true, "offline");
-  if (mqtt.connected()) {
-    mqtt.publish(TOPIC_STATUS, "online", true); // retained birth
+  const unsigned long nowMs = millis();
+  if (nowMs < nextMqttAttemptMs) return;
+
+  const bool ok = mqtt.connect(NODE_ID, MQTT_USER, MQTT_PASS);
+  if (!ok) {
+    // Backoff: 5s between attempts
+    nextMqttAttemptMs = nowMs + 5000UL;
+    Serial.print("[MQTT] Connect failed, state=");
+    Serial.println(mqtt.state());
+    return;
   }
+  nextMqttAttemptMs = nowMs; // reset
 }
 
 // ------------------- Ethernet events ------------------
-static bool eth_connected = false;
-
 void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
@@ -118,10 +141,18 @@ void WiFiEvent(WiFiEvent_t event) {
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       eth_connected = true;
+      Serial.println("[ETH] Link up + got IP");
+      Serial.print("[ETH] IP: ");
+      Serial.println(ETH.localIP());
+      Serial.print("[ETH] GW: ");
+      Serial.println(ETH.gatewayIP());
+      Serial.print("[ETH] DNS: ");
+      Serial.println(ETH.dnsIP());
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
     case ARDUINO_EVENT_ETH_STOP:
       eth_connected = false;
+      Serial.println("[ETH] Link down");
       break;
     default: break;
   }
@@ -133,43 +164,24 @@ void setup() {
   delay(200);
   Serial.println("\n[Barkasse Weather Mock] Starting...");
 
+  // PubSubClient defaults to 256 bytes; our JSON can exceed that.
+  mqtt.setBufferSize(MQTT_BUFFER_SIZE);
+  mqtt.setKeepAlive(60);
+  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+
   // Starting Ethernet (RMII PHY). Adjust pins/PHY type for your board if needed.
   // Common defaults work for many ESP32 + LAN8720 boards.
   WiFi.onEvent(WiFiEvent);
   ETH.begin(); // If your board needs explicit PHY params: ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE);
 
-  // Wait for Ethernet connection
-  Serial.print("[ETH] Waiting for connection");
-  while (!eth_connected) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println(" connected!");
-
-  // Time (for timestamps) via SNTP
-  Serial.println("[NTP] Synchronizing time...");
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  
-  // Wait for NTP sync (up to 10 seconds)
-  int attempts = 0;
-  while (!isTimeValid() && attempts < 20) {
-    Serial.print(".");
-    delay(500);
-    attempts++;
-  }
-  
-  if (isTimeValid()) {
-    Serial.println(" time synced!");
-    Serial.print("[NTP] Current time: ");
-    Serial.println(isoNow());
-  } else {
-    Serial.println(" WARNING: Time sync failed! Timestamps may be incorrect.");
-  }
+  Serial.println("[ETH] Waiting for link (non-blocking)...");
+  Serial.println("[NTP] Will sync from hub when link is up...");
 }
 
 // ------------------- Loop -----------------------------
 void loop() {
   if (eth_connected) {
+    ensureTimeSynced();
     if (!mqtt.connected()) {
       mqttConnect();
     } else {

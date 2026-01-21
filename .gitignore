@@ -1,6 +1,7 @@
-# Ignore Mosquitto password file
-pi/mosquitto/passwd
-# Ignore Mosquitto database file
-pi/mosquitto/data/mosquitto.db
-
 .vscode
+
+# Node-RED local runtime artefacts (if created on device)
+nodered_data/lib/
+nodered_data/node_modules/
+nodered_data/.node-red/
+

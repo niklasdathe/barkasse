@@ -2,7 +2,6 @@
   Barkasse Water Demo (ESP32 WROOM + WiFi + MQTT)
   - Emulates a small water sensor cluster (temp, pH, turbidity, conductivity, level)
   - Publishes per-sensor + cluster/state JSON
-  - Uses MQTT LWT (online/offline) + retained birth message
   - Matches topic and payload format of the ESP32-P4 Ethernet weather mock
 
   Arduino IDE:
@@ -21,12 +20,13 @@
 // ------------------- Node identity -------------------
 static const char* NODE_ID    = "esp32wifi-01";
 static const char* CLUSTER_ID = "water";
-
 // ------------------- MQTT setup ----------------------
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
-static const char* TOPIC_STATUS  = "barkasse/esp32wifi-01/status";
+static const uint16_t MQTT_BUFFER_SIZE = 1024;
+static unsigned long nextMqttAttemptMs = 0;
+
 static const char* TOPIC_BASE    = "barkasse/esp32wifi-01/water/";      // + <sensor>
 static const char* TOPIC_CLUSTER = "barkasse/esp32wifi-01/water/state"; // summary
 
@@ -45,6 +45,19 @@ float levelCm   = 120.0;  // cm
 bool isTimeValid() {
   time_t now; time(&now);
   return (now > 1672531200); // After 2023-01-01 means NTP synced
+}
+
+static unsigned long lastNtpAttemptMs = 0;
+
+void ensureTimeSynced() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (isTimeValid()) return;
+  const unsigned long nowMs = millis();
+  // Retry periodically so it recovers after replug / hub boot order issues
+  if (nowMs - lastNtpAttemptMs < 30000UL) return; // 30s
+  lastNtpAttemptMs = nowMs;
+  Serial.println("[NTP] Attempting time sync...");
+  configTime(0, 0, NTP_HOST);
 }
 
 String isoNow() {
@@ -99,12 +112,18 @@ float jitter(float v, float step, float minv, float maxv) {
 
 // ------------------- MQTT connect ---------------------
 void mqttConnect() {
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  // Last Will: report "offline" retained
-  mqtt.connect(NODE_ID, MQTT_USER, MQTT_PASS, TOPIC_STATUS, 1, true, "offline");
-  if (mqtt.connected()) {
-    mqtt.publish(TOPIC_STATUS, "online", true); // retained birth
+  const unsigned long nowMs = millis();
+  if (nowMs < nextMqttAttemptMs) return;
+
+  const bool ok = mqtt.connect(NODE_ID, MQTT_USER, MQTT_PASS);
+  if (!ok) {
+    nextMqttAttemptMs = nowMs + 5000UL;
+    Serial.print("[MQTT] Connect failed, state=");
+    Serial.println(mqtt.state());
+    return;
   }
+
+  nextMqttAttemptMs = nowMs;
 }
 
 // ------------------- WiFi connect ---------------------
@@ -134,12 +153,18 @@ void setup() {
   delay(200);
   Serial.println("\n[Barkasse Water Mock] Starting...");
 
+  // PubSubClient defaults to 256 bytes; our JSON can exceed that.
+  mqtt.setBufferSize(MQTT_BUFFER_SIZE);
+  mqtt.setKeepAlive(60);
+  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+
   // WiFi STA connect
   wifiConnect();
 
   // Time (for timestamps) via SNTP
   Serial.println("[NTP] Synchronizing time...");
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  lastNtpAttemptMs = millis() - 30000UL;
+  ensureTimeSynced();
 
   // Wait for NTP sync (up to 10 seconds)
   int attempts = 0;
@@ -164,6 +189,9 @@ void loop() {
     wifiConnect();
     delay(500);
   }
+
+  // Keep retrying until we have valid timestamps
+  ensureTimeSynced();
 
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqtt.connected()) {

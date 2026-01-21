@@ -9,6 +9,10 @@
 #define MQTT_HOST "192.168.50.1"
 #define MQTT_PORT 1883
 
+// --- NTP server (chrony on the hub) ---
+// On an isolated LAN/AP without internet, sensors should sync time from the hub.
+#define NTP_HOST "192.168.50.1"
+
 #define MQTT_USER "barkasse"
 #define MQTT_PASS "change-me"
 

@@ -1,0 +1,40 @@
+# move to /etc/systemd/system/barkasse-fullscreen.service
+# Autostarts Chromium in fullscreen showing the Barkasse UI.
+
+[Unit]
+Description=Barkasse UI Display (Chromium Fullscreen)
+After=graphical.target systemd-logind.service barkasse-ui.service
+Wants=graphical.target barkasse-ui.service
+
+[Service]
+User=hub
+Group=hub
+
+# Session wiring for the hub user on LightDM/Xorg.
+# %U expands to the numeric UID of User=.
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/hub/.Xauthority
+
+# Wait for hub's Xauthority cookie
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do [ -f /home/hub/.Xauthority ] && exit 0; sleep 0.25; done; echo "No XAUTHORITY: /home/hub/.Xauthority"; exit 1'
+
+# Wait for the Xorg socket
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do [ -S /tmp/.X11-unix/X0 ] && exit 0; sleep 0.25; done; echo "No X11 socket: /tmp/.X11-unix/X0"; exit 1'
+
+# Wait until the UI backend is responding on localhost:8080
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do curl -sSf http://localhost:8080/ >/dev/null 2>&1 && exit 0; sleep 0.25; done; echo "UI backend not reachable on :8080"; exit 1'
+
+# Fullscreen.
+ExecStart=/usr/bin/chromium-browser \
+  --new-window \
+  --incognito --start-fullscreen \
+  --no-first-run --no-default-browser-check --noerrdialogs --disable-infobars --disable-logging \
+  --app=http://localhost:8080/
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

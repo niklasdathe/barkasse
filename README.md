@@ -8,7 +8,7 @@ This section describes the setup and structure of the on board hub.
 
 ### 1.1 Core Ideas
 - Sensor nodes (ESP32/Arduino) publish JSON over MQTT via Ethernet/PoE or WiFi.
-- A Raspberry Pi acts as a central hub with Mosquitto and a FastAPI + WebSocket UI.
+- A Raspberry Pi / reTerminal acts as a central hub with Mosquitto + Node-RED (HTTP/WebSocket) serving a static UI.
 - The UI auto-discovers new sensors and displays them live on a 10-inch touch panel.
 
 ### 1.2 MQTT Topics & JSON Schema
@@ -30,38 +30,60 @@ This section describes the setup and structure of the on board hub.
 | ----------------------- | ------------------------------------------------------ |
 | `example-sensor-implementations/esp32p4-weatherstation-mock`  | ESP32-P4 (Ethernet) demo publishing weather data |
 | `example-sensor-implementations/esp32-wroom-waterstation-mock`| ESP32 WROOM (WiFi) demo publishing water data    |
-| `pi/docker-compose.yml` | Mosquitto MQTT broker                                  |
-| `pi/app/`               | FastAPI backend with WebSocket + static touchscreen UI |
-| `systemd/`              | Auto-update, backend, and Chromium startup services    |
+| `mosquitto/`            | Mosquitto config for native install                    |
+| `nodered_data/`         | Node-RED userDir (flows + settings)                    |
+| `ui/`                   | Static touchscreen UI                                  |
+| `systemd/`              | System services for hub + fullscreen UI                |
 
 
 ### 1.4 Setup on Raspberry Pi
 
-**1. Setup Mosquitto**
+This repo is designed to run **without Docker**.
+
+**1. Install Mosquitto + Node-RED**
 ```bash
-cd pi
-docker compose up -d
+sudo apt update
+sudo apt install -y mosquitto mosquitto-clients
 ```
 
-**2. Setup Python environment**
+Install Node-RED (if not already present):
 ```bash
-cd app
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+bash <(curl -sL https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered)
+```
+
+**2. Configure Mosquitto**
+```bash
+sudo cp mosquitto/mosquitto.conf /etc/mosquitto/conf.d/barkasse.conf
+sudo systemctl enable --now mosquitto
 ```
 
 **3. Enable services**
 ```bash
-sudo cp systemd/*.service /etc/systemd/system/
+sudo cp systemd/barkasse-ui.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now auto-git-update.service barkasse-ui.service kiosk-chromium.service
+sudo systemctl enable --now barkasse-ui.service
 ```
 
-**Chromium Fullscreen Startup**
+The UI is served at http://localhost:8080.
 
-- Chromium launches automatically in fullscreen Wayland mode (not strict kiosk).  
-- The UI is served at http://localhost:8080.  
+### 1.5 Isolated LAN (hub assigns IPs + NTP)
+
+If the hub and ESP32 are the only devices on a switch, the hub must provide IP addresses.
+
+This repo includes a small coordinator setup that configures:
+
+- Static IP on `eth0` (default `192.168.10.10/24`)
+- DHCP (dnsmasq) so the ESP32 gets an IP when plugged in
+- NTP (chrony) served by the hub
+
+Run:
+
+```bash
+chmod +x scripts/setup-lan-coordinator.sh scripts/barkasse-dhcp-mqtt-hook.sh
+BARKASSE_LAN_IFACE=eth0 BARKASSE_LAN_IP=192.168.10.10 ./scripts/setup-lan-coordinator.sh
+```
+
+Details: see [docs/lan_coordinator.md](docs/lan_coordinator.md).
 
 ### 1.5 Implementation Examples
 
@@ -77,8 +99,8 @@ Add any new sensor/cluster by publishing to the topic contract. No UI edits requ
 ### 1.7 Maintenance
 
 - Check backend: systemctl status barkasse-ui.service
-- Check browser: systemctl status kiosk-chromium.service
-- Update manually: git pull && sudo systemctl restart barkasse-ui kiosk-chromium
+- Check browser: systemctl status barkasse-fullscreen.service
+- Update manually: git pull && sudo systemctl restart barkasse-ui barkasse-fullscreen
 
 ### 1.8 UI menu (clear history & fullscreen)
 
@@ -91,9 +113,8 @@ The hub keeps recent datapoints in memory to render charts. You can delete this 
 
 This only affects the in-memory cache on the Pi; live updates continue as new datapoints arrive.
 
-#### Fullscreen vs kiosk
-
-Chromium is configured to start in fullscreen by default via systemd (no kiosk flags). From the UI menu you can toggle fullscreen on/off when needed. Service file: `systemd/kiosk-chromium.service`.
+This setup does not require Chromium at all. If you want the UI to open automatically on boot
+in fullscreen, enable `systemd/barkasse-fullscreen.service`.
 
 ## 2. Server
 

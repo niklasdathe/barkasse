@@ -26,13 +26,22 @@ const DEFAULT_CHART_HINT = 'Drag a tile here to view its history';
 const store = new Map();                 // Stores latest sensor data: key -> sensor payload
 const lastSeen = new Map();              // Tracks when each sensor last sent data: key -> timestamp
 const mutedUntilNextUpdate = new Set();  // Tracks tiles that should be hidden until next update
+const tileEls = new Map();               // Cache: key -> tile DOM element
 
 // WebSocket and UI state
 let ws = null;                    // WebSocket connection
 let reconnectTimer = null;        // Timer for reconnection attempts
 let draggedTile = null;           // Currently dragged tile element
 let menuEl = null;                // Context menu element
-let longPressTimer = null;        // Timer for tile long-press
+
+// Touch-drag state (for coarse pointers where HTML5 drag isn't reliable)
+let touchDragState = null;
+
+// Suppress Chromium's native context menu (right-click / touch-and-hold).
+// We provide our own tile menu instead.
+document.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+}, { capture: true });
 
 /* ============================================================================
  * HELPER FUNCTIONS
@@ -72,6 +81,20 @@ function ageMinutesFromSeen(k) {
   return (Date.now() - t) / 60000; // Convert milliseconds to minutes
 }
 
+/**
+ * Updates an existing tile element's content from a sensor payload.
+ */
+function updateTileContent(el, o) {
+  el.querySelector('.node').textContent = o.node || '';
+  el.querySelector('.num').textContent = formatValue(o.value);
+  el.querySelector('.unit').textContent = o.unit || '';
+  el.querySelector('.ts').textContent = o.ts || '';
+}
+
+/* ============================================================================
+ * TILES (Create/Update/Render)
+ * ============================================================================ */
+
 /* ============================================================================
  * SENSOR TILE MANAGEMENT
  * ============================================================================ */
@@ -84,7 +107,7 @@ function ageMinutesFromSeen(k) {
  */
 function ensureTile(o) {
   const k = key(o);
-  let el = topics.querySelector(`[data-k="${CSS.escape(k)}"]`);
+  let el = tileEls.get(k) || topics.querySelector(`[data-k="${CSS.escape(k)}"]`);
   
   // Create new tile if it doesn't exist
   if (!el) {
@@ -92,10 +115,10 @@ function ensureTile(o) {
     el = document.createElement('div');
     el.className = 'tile opacity-0';
     el.dataset.k = k;
+    const titleSensor = o.sensor || 'state';
     el.innerHTML = `
       <span class="dot" aria-hidden="true"></span>
-      <button class="tile-actions" aria-label="Tile actions" title="Actions">⋮</button>
-      <h3>${o.cluster} / ${o.sensor}</h3>
+      <h3>${o.cluster} / ${titleSensor}</h3>
       <div class="meta node"></div>
       <div class="value"><span class="num">—</span><span class="unit"></span></div>
       <div class="meta ts"></div>
@@ -105,15 +128,10 @@ function ensureTile(o) {
     topics.appendChild(el);
     requestAnimationFrame(() => el.classList.remove('opacity-0'));
 
-    // Setup drag & drop based on input device type
-    const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    // Native HTML5 drag (mouse) + custom long-press drag (touch)
+    el.setAttribute('draggable', 'true');
 
-    if (!isCoarse) {
-      // Mouse/precision pointer: enable drag immediately
-      el.setAttribute('draggable', 'true');
-    }
-
-    // Common drag handlers for both mouse and touch
+    // Mouse drag handlers (HTML5 DnD)
     el.addEventListener('dragstart', onTileDragStart);
     el.addEventListener('dragend', onTileDragEnd);
 
@@ -124,8 +142,8 @@ function ensureTile(o) {
       }
     });
 
-    // On touch devices, we do NOT enable drag via long-press anymore;
-    // use the actions button or long-press to open the menu instead.
+    // Touch drag implementation (long-press to drag)
+    installTouchDrag(el);
 
     // Context menu: right-click (mouse) opens actions, and long-press (touch) too
     el.addEventListener('contextmenu', (e) => {
@@ -133,41 +151,451 @@ function ensureTile(o) {
       openTileMenu(el, e.clientX, e.clientY);
     });
 
-    // Long-press to open menu on touch
-    el.addEventListener('touchstart', (e) => {
-      // only single-finger
-      if (e.touches && e.touches.length === 1) {
-        longPressTimer = setTimeout(() => {
-          const t = e.touches[0];
-          openTileMenu(el, t.clientX, t.clientY);
-        }, 600);
-      }
-    }, { passive: true });
-    el.addEventListener('touchend', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-    el.addEventListener('touchmove', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
+    // Long-press menu is handled via pointer events in installTouchDrag() on touch,
+    // and via right-click context menu on mouse.
 
-    // Actions button click
-    const actionsBtn = el.querySelector('.tile-actions');
-    if (actionsBtn) {
-      actionsBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const rect = actionsBtn.getBoundingClientRect();
-        openTileMenu(el, rect.left + rect.width / 2, rect.bottom);
-      });
+  }
+
+  // Keep cache in sync even if the element was found via querySelector.
+  tileEls.set(k, el);
+
+  // Update tile content with sensor data
+  updateTileContent(el, o);
+
+  return el;
+}
+
+/* ==========================================================================
+ * TOUCH DRAG (reTerminal-like)
+ * ==========================================================================
+ */
+
+function installTouchDrag(tileEl) {
+  const MOVE_THRESHOLD_PX = 10;
+  const VERTICAL_INTENT_BIAS_PX = 4;
+  const MENU_HOLD_MS = 650;
+
+  const isLikelyTouchEnvironment = () => {
+    const maxTp = Number(navigator.maxTouchPoints || 0);
+    const hoverNone = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+    return maxTp > 0 || hoverNone;
+  };
+
+  const isTouchLikePointerEvent = (e) => {
+    // On Chromium/X11 some touchscreens appear as pointerType=mouse.
+    if (!e || !e.pointerType) return isLikelyTouchEnvironment();
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') return true;
+    if (e.pointerType === 'mouse') return isLikelyTouchEnvironment();
+    return false;
+  };
+
+  let startX = 0;
+  let startY = 0;
+  let pointerId = null;
+  let touchId = null;
+  let mouseActive = false;
+  let menuTimer = null;
+  let dragStarted = false;
+
+  const clearTimers = () => {
+    if (menuTimer) clearTimeout(menuTimer);
+    menuTimer = null;
+  };
+
+  const movedBeyondThreshold = (clientX, clientY) => {
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    return (dx * dx + dy * dy) >= (MOVE_THRESHOLD_PX * MOVE_THRESHOLD_PX);
+  };
+
+  const scheduleMenuOnly = (tile, cx, cy) => {
+    clearTimers();
+    dragStarted = false;
+
+    // Open menu only if the user holds without moving.
+    menuTimer = setTimeout(() => {
+      if (touchDragState) return;
+      if (dragStarted) return;
+      openTileMenu(tile, cx, cy);
+    }, MENU_HOLD_MS);
+  };
+
+  const maybeStartDragFromMove = (tile, clientX, clientY) => {
+    if (touchDragState) return;
+    if (!movedBeyondThreshold(clientX, clientY)) return;
+
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Preserve horizontal swipe for scrolling the tile strip.
+    // Start dragging only when the gesture is clearly vertical (towards graphs/trash).
+    const verticalIntent = absDy > (absDx + VERTICAL_INTENT_BIAS_PX);
+    if (!verticalIntent) return;
+
+    // Moving cancels the long-press menu.
+    if (menuTimer) {
+      clearTimeout(menuTimer);
+      menuTimer = null;
+    }
+
+    dragStarted = true;
+    startTouchDrag(tile, { clientX, clientY });
+  };
+
+  // Prefer Pointer Events when available (Chromium, modern WebKit).
+  if ('PointerEvent' in window) {
+    const onPointerDown = (e) => {
+      // Primary button only (avoid right-click / secondary).
+      if (typeof e.button === 'number' && e.button !== 0) return;
+      if (!tileEl.dataset.k) return;
+
+      const touchLike = isTouchLikePointerEvent(e);
+
+      // Do not interfere with real mouse: native HTML5 drag handles that.
+      if (!touchLike) return;
+
+      pointerId = e.pointerId;
+      touchId = null;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      scheduleMenuOnly(tileEl, startX, startY);
+    };
+
+    const onPointerMove = (e) => {
+      if (pointerId === null || e.pointerId !== pointerId) return;
+
+      const touchLike = isTouchLikePointerEvent(e);
+      if (!touchLike) return;
+
+      // Start drag immediately on vertical intent.
+      maybeStartDragFromMove(tileEl, e.clientX, e.clientY);
+
+      if (touchDragState) {
+        e.preventDefault();
+        updateTouchDrag(e.clientX, e.clientY);
+      }
+    };
+
+    const onPointerUpOrCancel = async (e) => {
+      if (pointerId === null || e.pointerId !== pointerId) return;
+
+      const touchLike = isTouchLikePointerEvent(e);
+      if (!touchLike) return;
+
+      clearTimers();
+
+      if (touchDragState) {
+        e.preventDefault();
+        await finishTouchDrag(e.clientX, e.clientY);
+      }
+
+      pointerId = null;
+      dragStarted = false;
+    };
+
+    tileEl.addEventListener('pointerdown', onPointerDown, { passive: true });
+    tileEl.addEventListener('pointermove', onPointerMove, { passive: false });
+    tileEl.addEventListener('pointerup', onPointerUpOrCancel, { passive: false });
+    tileEl.addEventListener('pointercancel', onPointerUpOrCancel, { passive: false });
+    return;
+  }
+
+  // Touch Events fallback (older embedded browsers / kiosk shells).
+  const getTouchById = (touchList, id) => {
+    if (!touchList) return null;
+    for (let i = 0; i < touchList.length; i++) {
+      if (touchList[i].identifier === id) return touchList[i];
+    }
+    return null;
+  };
+
+  const onTouchStart = (e) => {
+    if (!tileEl.dataset.k) return;
+    if (!e.touches || e.touches.length !== 1) return;
+
+    const t = e.touches[0];
+    touchId = t.identifier;
+    pointerId = null;
+    startX = t.clientX;
+    startY = t.clientY;
+
+    scheduleMenuOnly(tileEl, startX, startY);
+  };
+
+  const onTouchMove = (e) => {
+    if (touchId === null) return;
+    const t = getTouchById(e.touches, touchId);
+    if (!t) return;
+
+    maybeStartDragFromMove(tileEl, t.clientX, t.clientY);
+
+    if (touchDragState) {
+      // Prevent the page/strip from scrolling while dragging.
+      e.preventDefault();
+      updateTouchDrag(t.clientX, t.clientY);
+    }
+  };
+
+  const onTouchEndOrCancel = async (e) => {
+    if (touchId === null) return;
+    clearTimers();
+
+    if (touchDragState) {
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+      if (t) {
+        e.preventDefault();
+        await finishTouchDrag(t.clientX, t.clientY);
+      } else {
+        await finishTouchDrag(startX, startY);
+      }
+    }
+
+    touchId = null;
+    dragStarted = false;
+  };
+
+  tileEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  tileEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  tileEl.addEventListener('touchend', onTouchEndOrCancel, { passive: false });
+  tileEl.addEventListener('touchcancel', onTouchEndOrCancel, { passive: false });
+
+  // Mouse-event fallback (touchscreens that emulate mouse, esp. on X11).
+  // Only enable this on likely-touch environments to avoid changing desktop mouse behavior.
+  if (isLikelyTouchEnvironment()) {
+    let windowHandlersAttached = false;
+
+    const onMouseDown = (e) => {
+      if (typeof e.button === 'number' && e.button !== 0) return;
+      if (!tileEl.dataset.k) return;
+      if (touchDragState) return;
+
+      mouseActive = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      scheduleMenuOnly(tileEl, startX, startY);
+
+      // Attach global listeners only for the active interaction.
+      if (!windowHandlersAttached) {
+        windowHandlersAttached = true;
+        window.addEventListener('mousemove', onMouseMove, { passive: false });
+        window.addEventListener('mouseup', onMouseUp, { passive: false });
+      }
+    };
+
+    const onMouseMove = (e) => {
+      if (!mouseActive) return;
+
+      maybeStartDragFromMove(tileEl, e.clientX, e.clientY);
+
+      if (touchDragState) {
+        e.preventDefault();
+        updateTouchDrag(e.clientX, e.clientY);
+      }
+    };
+
+    const onMouseUp = async (e) => {
+      if (!mouseActive) return;
+      mouseActive = false;
+      clearTimers();
+
+      if (touchDragState) {
+        e.preventDefault();
+        await finishTouchDrag(e.clientX, e.clientY);
+      }
+
+      dragStarted = false;
+
+      // Detach global listeners after the interaction to avoid leaking handlers per tile.
+      if (windowHandlersAttached) {
+        windowHandlersAttached = false;
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      }
+    };
+
+    tileEl.addEventListener('mousedown', onMouseDown, { passive: true });
+  }
+}
+
+function startTouchDrag(tileEl, e) {
+  closeTileMenu();
+  draggedTile = tileEl;
+  draggedTile.classList.add('dragging');
+  showTrash();
+
+  // Capture moves globally so we don't lose events when the finger leaves the tile.
+  const overlay = document.createElement('div');
+  overlay.className = 'drag-overlay';
+  overlay.addEventListener('contextmenu', (ev) => ev.preventDefault(), { capture: true });
+  document.body.appendChild(overlay);
+
+  const ghost = tileEl.cloneNode(true);
+  ghost.classList.add('tile-ghost');
+  ghost.removeAttribute('draggable');
+  ghost.style.width = tileEl.getBoundingClientRect().width + 'px';
+  ghost.style.height = tileEl.getBoundingClientRect().height + 'px';
+  document.body.appendChild(ghost);
+
+  touchDragState = {
+    overlay,
+    ghost,
+    overGraphEl: null,
+    overTrash: false,
+    offsetX: 24,
+    offsetY: 24,
+    finishing: false,
+    cleanup: null,
+  };
+
+  // Track drag on the overlay itself (most reliable on Chromium/X11 touch stacks).
+  // This avoids missing pointer/touch/mouse up events due to retargeting.
+  const getXY = (ev) => {
+    if (!ev) return null;
+    if (typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
+      return { x: ev.clientX, y: ev.clientY };
+    }
+    if (ev.touches && ev.touches.length) {
+      return { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    }
+    if (ev.changedTouches && ev.changedTouches.length) {
+      return { x: ev.changedTouches[0].clientX, y: ev.changedTouches[0].clientY };
+    }
+    return null;
+  };
+
+  const onMove = (ev) => {
+    if (!touchDragState) return;
+    const pt = getXY(ev);
+    if (!pt) return;
+    ev.preventDefault?.();
+    updateTouchDrag(pt.x, pt.y);
+  };
+
+  const onEnd = async (ev) => {
+    const pt = getXY(ev) || { x: e.clientX, y: e.clientY };
+    ev.preventDefault?.();
+    await finishTouchDrag(pt.x, pt.y);
+  };
+
+  // Pointer Events
+  if ('PointerEvent' in window) {
+    overlay.addEventListener('pointermove', onMove, { passive: false });
+    overlay.addEventListener('pointerup', onEnd, { passive: false });
+    overlay.addEventListener('pointercancel', onEnd, { passive: false });
+    if (typeof e.pointerId === 'number' && typeof overlay.setPointerCapture === 'function') {
+      try { overlay.setPointerCapture(e.pointerId); } catch {}
     }
   }
 
-  // Update tile content with sensor data
-  el.querySelector('.node').textContent = o.node || '';
-  el.querySelector('.num').textContent = formatValue(o.value);
-  el.querySelector('.unit').textContent = o.unit || '';
-  el.querySelector('.ts').textContent = o.ts || '';
+  // Touch Events
+  overlay.addEventListener('touchmove', onMove, { passive: false });
+  overlay.addEventListener('touchend', onEnd, { passive: false });
+  overlay.addEventListener('touchcancel', onEnd, { passive: false });
 
-  return el;
+  // Mouse Events
+  overlay.addEventListener('mousemove', onMove, { passive: false });
+  overlay.addEventListener('mouseup', onEnd, { passive: false });
+
+  touchDragState.cleanup = () => {
+    overlay.removeEventListener('pointermove', onMove);
+    overlay.removeEventListener('pointerup', onEnd);
+    overlay.removeEventListener('pointercancel', onEnd);
+    overlay.removeEventListener('touchmove', onMove);
+    overlay.removeEventListener('touchend', onEnd);
+    overlay.removeEventListener('touchcancel', onEnd);
+    overlay.removeEventListener('mousemove', onMove);
+    overlay.removeEventListener('mouseup', onEnd);
+  };
+
+  updateTouchDrag(e.clientX, e.clientY);
+}
+
+function updateTouchDrag(clientX, clientY) {
+  if (!touchDragState) return;
+
+  // Position ghost
+  const x = clientX - touchDragState.offsetX;
+  const y = clientY - touchDragState.offsetY;
+  touchDragState.ghost.style.transform = `translate(${x}px, ${y}px)`;
+
+  // Hit-test drop targets
+  // Hit-test: ignore our overlay so we can detect underlying drop targets.
+  const prevPe = touchDragState.overlay ? touchDragState.overlay.style.pointerEvents : '';
+  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = 'none';
+  const under = document.elementFromPoint(clientX, clientY);
+  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = prevPe;
+  const graphEl = under ? under.closest?.('.graph-tile[data-graph="true"]') : null;
+  const trashEl = under ? under.closest?.('#trash') : null;
+
+  // Graph hover styling
+  if (touchDragState.overGraphEl && touchDragState.overGraphEl !== graphEl) {
+    touchDragState.overGraphEl.classList.remove('chart-over');
+  }
+  if (graphEl) {
+    graphEl.classList.add('chart-over');
+  }
+  touchDragState.overGraphEl = graphEl;
+
+  // Trash hover styling
+  const isOverTrash = !!trashEl;
+  trash.classList.toggle('over', isOverTrash);
+  touchDragState.overTrash = isOverTrash;
+}
+
+async function finishTouchDrag(clientX, clientY) {
+  if (!touchDragState) return;
+  if (touchDragState.finishing) return;
+  touchDragState.finishing = true;
+
+  // Some stacks won't fire a final move event before up; update hover on release.
+  updateTouchDrag(clientX, clientY);
+
+  // Determine final target based on current hover
+  const dropOnTrash = touchDragState.overTrash;
+  const dropOnGraphEl = touchDragState.overGraphEl;
+
+  // Cleanup hover styles
+  if (dropOnGraphEl) dropOnGraphEl.classList.remove('chart-over');
+  trash.classList.remove('over');
+
+  // Perform drop action
+  if (draggedTile && draggedTile.dataset.k) {
+    const k = draggedTile.dataset.k;
+
+    if (dropOnTrash) {
+      mutedUntilNextUpdate.add(k);
+      draggedTile.style.display = 'none';
+
+    } else if (dropOnGraphEl) {
+      const gt = graphs.find(g => g.el === dropOnGraphEl);
+      if (gt) {
+        gt.key = k;
+        await gt.draw();
+      }
+    }
+  }
+
+  // Cleanup drag state
+  if (touchDragState.cleanup) {
+    try { touchDragState.cleanup(); } catch {}
+  }
+  if (touchDragState.overlay) {
+    touchDragState.overlay.remove();
+  }
+  if (touchDragState.ghost) {
+    touchDragState.ghost.remove();
+  }
+  touchDragState = null;
+
+  if (draggedTile) {
+    draggedTile.classList.remove('dragging');
+  }
+  draggedTile = null;
+  hideTrash();
 }
 
 /**
@@ -346,12 +774,6 @@ function render(o) {
   
   const el = ensureTile(o);
   el.style.display = ''; // Ensure visible
-  
-  // Update tile content
-  el.querySelector('.node').textContent = o.node || '';
-  el.querySelector('.num').textContent = formatValue(o.value);
-  el.querySelector('.unit').textContent = o.unit || '';
-  el.querySelector('.ts').textContent = o.ts || '';
   
   paintDot(el);
 }

@@ -26,7 +26,7 @@ This document describes the working configuration on the Barkasse hub (reTermina
 - `tailscale0` — remote access & private networking
 - `eth0` — (planned) sensor LAN
 - `wlan0` — (planned) Wi‑Fi AP / hotspot
-- `docker0` — docker bridge (not relevant for time sync)
+
 
 ---
 

@@ -1,17 +1,20 @@
 # move to /etc/systemd/system/barkasse-ui.service
 
 [Unit]
-Description=Barkasse Hub UI Backend
-After=network-online.target auto-git-update.service
-Wants=network-online.target
+Description=Barkasse Hub (Node-RED + UI)
+After=network.target
+Wants=network.target
+Conflicts=nodered.service
 
 [Service]
 User=hub
 Group=hub
-WorkingDirectory=/home/hub/barkasse-hub/pi/app
-# Run via login shell so PATH/env match .venv reliably
-ExecStart=/usr/bin/env bash -lc 'source .venv/bin/activate && exec uvicorn main:app --host 0.0.0.0 --port 8080'
-Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+WorkingDirectory=/home/hub/barkasse-hub
+ExecStartPre=/usr/bin/test -d /home/hub/barkasse-hub/nodered_data
+ExecStartPre=/usr/bin/test -f /home/hub/barkasse-hub/nodered_data/flows.json
+ExecStartPre=/usr/bin/test -f /home/hub/barkasse-hub/nodered_data/settings.js
+ExecStart=/usr/bin/env node-red --userDir /home/hub/barkasse-hub/nodered_data --settings /home/hub/barkasse-hub/nodered_data/settings.js
 Restart=always
 RestartSec=3
 
