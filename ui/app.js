@@ -817,6 +817,7 @@ class GraphTile {
     this.key = key;          // Sensor key being displayed (null = empty)
     this.data = null;
     this.unit = null;
+    this.hoverX = null;      // Track hover X coordinate
 
     // Cache DOM elements
     this.title = this.el.querySelector('.chart-title');
@@ -836,6 +837,14 @@ class GraphTile {
     this.buttons.forEach(b => {
       b.addEventListener('click', e => this.onPeriodClick(e));
     });
+
+    // Setup tooltip interaction
+    if (this.canvas) {
+      // Use pointer events to handle both mouse and touch without delay
+      this.canvas.addEventListener('pointermove', e => this.onPointerMove(e), { passive: true });
+      this.canvas.addEventListener('pointerdown', e => this.onPointerMove(e), { passive: true });
+      this.canvas.addEventListener('pointerleave', () => this.onPointerLeave(), { passive: true });
+    }
     
     this.syncButtons();
     this.reset();
@@ -881,6 +890,28 @@ class GraphTile {
   }
 
   /**
+   * Handles pointer move/down to show tooltip
+   */
+  onPointerMove(e) {
+    if (!this.key || !this.data || this.data.length === 0) return;
+    
+    // Get X coordinate relative to the canvas
+    const rect = this.canvas.getBoundingClientRect();
+    this.hoverX = e.clientX - rect.left;
+    
+    // Redraw to show tooltip
+    this.render();
+  }
+
+  /**
+   * Handles pointer leave to hide tooltip
+   */
+  onPointerLeave() {
+    this.hoverX = null;
+    this.render();
+  }
+
+  /**
    * Handles drag over event - shows visual feedback
    */
   onDragOver(e) {
@@ -907,6 +938,7 @@ class GraphTile {
     e.preventDefault();
     this.el.classList.remove('chart-over');
     this.key = draggedTile.dataset.k;
+    this.hoverX = null; // Reset hover state
     await this.refresh();
   }
 
@@ -920,6 +952,7 @@ class GraphTile {
     if (this.hint) {
       this.hint.textContent = DEFAULT_CHART_HINT;
     }
+    this.hoverX = null;
     const ctx = this.canvas.getContext('2d');
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
@@ -1066,6 +1099,9 @@ class GraphTile {
 
     // Draw axes
     ctx.lineWidth = 1;
+    ctx.strokeStyle = '#000'; // Ensure default stroke color
+    ctx.setLineDash([]);      // Ensure default line dash
+
     ctx.beginPath();
     ctx.moveTo(padL, padT);        // Top-left
     ctx.lineTo(padL, h - padB);    // Bottom-left (Y-axis)
@@ -1074,6 +1110,7 @@ class GraphTile {
 
     // Draw Y-axis grid lines and labels
     ctx.font = '12px system-ui';
+    ctx.fillStyle = '#000';
     for (let i = 0; i <= 4; i++) {
       const yv = minY + (yR * i / 4); // Y value at this grid line
       const y = h - padB - (plotH * i / 4); // Y position on canvas
@@ -1102,9 +1139,10 @@ class GraphTile {
         ctx.lineTo(x, y);
       }
     });
+    ctx.strokeStyle = '#000';
     ctx.stroke();
 
-    // Draw latest value as a dot with label
+    // Draw latest value as a dot with label (only if not hovering to avoid clutter, or always? keeping it always for now)
     const last = data[data.length - 1];
     const lx = padL + ((new Date(last.ts).getTime() - minX) / (maxX - minX || 1)) * plotW;
     const ly = h - padB - ((last.value - minY) / yR) * plotH;
@@ -1113,6 +1151,104 @@ class GraphTile {
     ctx.arc(lx, ly, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillText(`${last.value.toFixed(2)} ${unit || ''}`, lx + 6, ly - 6);
+
+    // ----------------------------------------
+    // Draw Tooltip / Hover Indicator
+    // ----------------------------------------
+    if (this.hoverX !== null) {
+      // 1. Determine which data point is closest to the cursor horizontally
+      const plotX = Math.max(0, Math.min(plotW, this.hoverX - padL));
+      const targetTime = minX + (plotX / plotW) * (maxX - minX);
+      
+      // Find closest data point
+      let closest = data[0];
+      let minDiff = Math.abs(new Date(closest.ts).getTime() - targetTime);
+
+      // (Optimized search could be binary search, but linear is fine for this size)
+      for (let i = 1; i < data.length; i++) {
+        const t = new Date(data[i].ts).getTime();
+        const diff = Math.abs(t - targetTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = data[i];
+        }
+      }
+
+      if (closest) {
+        // Coordinates of the closest point
+        const cx = padL + ((new Date(closest.ts).getTime() - minX) / (maxX - minX || 1)) * plotW;
+        const cy = h - padB - ((closest.value - minY) / yR) * plotH;
+
+        // Draw vertical dotted line
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cx, padT);
+        ctx.lineTo(cx, h - padB);
+        ctx.strokeStyle = '#888';
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw highlight circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.stroke();
+
+        // Prepare tooltip text
+        const dateObj = new Date(closest.ts);
+        const dateStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const valStr = `${closest.value.toFixed(2)} ${unit || ''}`;
+
+        // Measure text for box
+        ctx.font = '12px system-ui';
+        const dateW = ctx.measureText(dateStr).width;
+        ctx.font = 'bold 12px system-ui';
+        const valW = ctx.measureText(valStr).width;
+        
+        const boxW = Math.max(dateW, valW) + 16;
+        const boxH = 38;
+        
+        // Position tooltip near the point, but keep it inside canvas
+        let tx = cx + 10; 
+        let ty = cy - 45;
+
+        if (tx + boxW > w - 4) {
+          tx = cx - boxW - 10; // Flip to left
+        }
+        if (ty < 0) {
+          ty = cy + 10; // Flip below if too high
+        }
+
+        // Draw Tooltip Box
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.shadowColor = 'rgba(0,0,0,0.15)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        ctx.fillRect(tx, ty, boxW, boxH);
+        ctx.restore();
+
+        // Border
+        ctx.strokeStyle = '#ccc';
+        ctx.strokeRect(tx, ty, boxW, boxH);
+
+        // Draw Text
+        ctx.fillStyle = '#444';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        
+        ctx.font = '12px system-ui';
+        ctx.fillText(dateStr, tx + 8, ty + 6);
+        
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 12px system-ui';
+        ctx.fillText(valStr, tx + 8, ty + 20);
+      }
+    }
   }
 }
 
