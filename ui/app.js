@@ -671,6 +671,7 @@ function openHeaderMenu(anchorBtn) {
   headerMenuEl.innerHTML = `
     <button class="menu-item" data-action="clear-all" aria-label="Clear all history">Clear history…</button>
     <button class="menu-item" data-action="toggle-fullscreen" aria-label="Toggle fullscreen">Toggle fullscreen</button>
+    <button class="menu-item" data-action="refresh-page" aria-label="Refresh page">Refresh page</button>
   `;
 
   // Position below the anchor button
@@ -708,6 +709,11 @@ function openHeaderMenu(anchorBtn) {
     } catch (e) {
       alert('Fullscreen toggle failed: ' + e.message);
     }
+  });
+
+  headerMenuEl.querySelector('[data-action="refresh-page"]').addEventListener('click', () => {
+    closeHeaderMenu();
+    window.location.reload();
   });
 }
 
