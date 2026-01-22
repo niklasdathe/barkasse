@@ -636,7 +636,7 @@ function openTileMenu(tile, clientX, clientY) {
       await clearHistory(k);
       // Redraw graphs that show this key
       graphs.forEach(gt => {
-        if (gt.key === k) gt.draw();
+        if (gt.key === k) gt.refresh();
       });
       // Brief feedback on tile
       const num = tile.querySelector('.num');
@@ -695,7 +695,7 @@ function openHeaderMenu(anchorBtn) {
     if (!proceed) return;
     try {
       await clearHistory();
-      graphs.forEach(g => g.key && g.draw());
+      graphs.forEach(g => g.key && g.refresh());
     } catch (e) {
       alert('Failed to clear history: ' + e.message);
     }
@@ -815,6 +815,8 @@ class GraphTile {
     this.el = rootEl;        // Root DOM element
     this.period = period;    // Time period: '1h', '1d', or 'max'
     this.key = key;          // Sensor key being displayed (null = empty)
+    this.data = null;
+    this.unit = null;
 
     // Cache DOM elements
     this.title = this.el.querySelector('.chart-title');
@@ -844,7 +846,7 @@ class GraphTile {
 
     // Draw graph if sensor key is provided
     if (this.key) {
-      this.draw();
+      this.refresh();
     }
   }
 
@@ -874,7 +876,7 @@ class GraphTile {
     this.period = e.currentTarget.dataset.p;
     this.syncButtons();
     if (this.key) {
-      this.draw();
+      this.refresh();
     }
   }
 
@@ -905,7 +907,7 @@ class GraphTile {
     e.preventDefault();
     this.el.classList.remove('chart-over');
     this.key = draggedTile.dataset.k;
-    await this.draw();
+    await this.refresh();
   }
 
   /**
@@ -949,17 +951,14 @@ class GraphTile {
     
     // Redraw if sensor is assigned
     if (this.key) {
-      this.draw();
+      this.render();
     }
   }
 
   /**
-   * Draws the graph with historical sensor data
-   * - Fetches data from /history endpoint
-   - Draws axes, grid lines, and data line
-   * - Shows latest value as a dot with label
+   * Fetches historical data and renders the graph
    */
-  async draw() {
+  async refresh() {
     if (!this.key) return;
 
     // Update title
@@ -982,6 +981,53 @@ class GraphTile {
       }
       return;
     }
+    
+    this.unit = unit;
+    this.data = data;
+    this.render();
+  }
+
+  /**
+   * Adds a new data point and re-renders without fetching
+   */
+  addPoint(o) {
+      if (this.key && this.data) {
+          const val = { ts: o.ts, value: o.value };
+          this.data.push(val);
+          
+          // Prune based on period
+          if (this.period !== 'max') {
+             const now = new Date().getTime();
+             const ms = this.period === '1d' ? 86400000 : 3600000;
+             const cutoff = now - ms;
+             
+             // Simple loop to remove old points from the start
+             while(this.data.length > 0 && new Date(this.data[0].ts).getTime() < cutoff) {
+                 this.data.shift();
+             }
+          }
+          this.render();
+      }
+  }
+
+  /**
+   * Renders the graph using cached data
+   */
+  render() {
+    if (!this.key) return;
+
+    // Update title
+    if (this.title) {
+      this.title.textContent = `${this.key} (${this.period})`;
+    }
+    this.syncButtons();
+    
+    // Clear canvas
+    const ctx = this.canvas.getContext('2d');
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    const data = this.data;
+    const unit = this.unit;
 
     // Check if data is available
     if (!Array.isArray(data) || data.length === 0) {
@@ -1223,7 +1269,7 @@ function connectWS() {
         // Refresh any graphs showing this sensor
         graphs.forEach(gt => {
           if (gt.key === k) {
-            gt.draw();
+            gt.addPoint(o);
           }
         });
       }
