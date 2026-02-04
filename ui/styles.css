@@ -77,7 +77,6 @@ header {
   flex:0 0 auto;
   display:flex; flex-direction:row; gap:var(--topics-gap);
   overflow-x:auto; overflow-y:hidden;
-  scroll-snap-type:x proximity; /* adjust snap feel or disable snapping */
   height:calc(var(--tile-h) + var(--scroll-thickness)); /* prevents clipping */
   padding-bottom:25px;  /* breathing room so scrollbar doesn’t overlap tiles */
 }
@@ -86,7 +85,6 @@ header {
 .tile{
   flex:0 0 var(--tile-w);
   height:var(--tile-h);
-  scroll-snap-align:start;
 
   position:relative;
   background:var(--card-bg);       /* card color/transparency */
