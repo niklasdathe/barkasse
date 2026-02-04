@@ -856,9 +856,12 @@ class GraphTile {
     // Setup tooltip interaction
     if (this.canvas) {
       // Use pointer events to handle both mouse and touch without delay
+      this.canvas.style.touchAction = 'none'; // Prevent browser scrolling
+      this.canvas.addEventListener('pointerdown', e => this.onPointerDown(e), { passive: true });
       this.canvas.addEventListener('pointermove', e => this.onPointerMove(e), { passive: true });
-      this.canvas.addEventListener('pointerdown', e => this.onPointerMove(e), { passive: true });
-      this.canvas.addEventListener('pointerleave', () => this.onPointerLeave(), { passive: true });
+      this.canvas.addEventListener('pointerup', e => this.onPointerUp(e), { passive: true });
+      this.canvas.addEventListener('pointercancel', e => this.onPointerUp(e), { passive: true });
+      this.canvas.addEventListener('pointerleave', e => this.onPointerLeave(e), { passive: true });
     }
     
     this.syncButtons();
@@ -905,7 +908,32 @@ class GraphTile {
   }
 
   /**
-   * Handles pointer move/down to show tooltip
+   * Handles pointer down to update tooltip and capture pointer (for touch scrubbing)
+   */
+  onPointerDown(e) {
+    if (this.canvas && typeof this.canvas.setPointerCapture === 'function') {
+      try {
+        this.canvas.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+    this.onPointerMove(e);
+  }
+
+  /**
+   * Handles pointer up/cancel to hide tooltip and release capture
+   */
+  onPointerUp(e) {
+    this.hoverX = null;
+    this.render();
+    if (this.canvas && typeof this.canvas.releasePointerCapture === 'function') {
+      try {
+        this.canvas.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+  }
+
+  /**
+   * Handles pointer move to show tooltip
    */
   onPointerMove(e) {
     if (!this.key || !this.data || this.data.length === 0) return;
@@ -921,7 +949,13 @@ class GraphTile {
   /**
    * Handles pointer leave to hide tooltip
    */
-  onPointerLeave() {
+  onPointerLeave(e) {
+    // If we have captured the pointer (e.g. touch scrubbing), ignore leave
+    if (this.canvas && e && typeof this.canvas.hasPointerCapture === 'function') {
+      try {
+        if (this.canvas.hasPointerCapture(e.pointerId)) return;
+      } catch (err) {}
+    }
     this.hoverX = null;
     this.render();
   }
@@ -1395,8 +1429,14 @@ function connectWS() {
       
       if (msg.type === 'snapshot') {
         // Initial data when connecting - load all sensors at once
+        let anyNew = false;
         msg.data.forEach(o => {
           const k = key(o);
+          
+          if (!tileEls.has(k)) {
+            anyNew = true;
+          }
+
           store.set(k, o);
           lastSeen.set(k, Date.now());
           
@@ -1405,17 +1445,25 @@ function connectWS() {
             render(o);
           }
         });
-        sortTiles();
+        
+        if (anyNew) {
+          sortTiles();
+        }
         
       } else if (msg.type === 'update') {
         // Single sensor update - update tile and refresh graphs if needed
         const o = msg.data;
         const k = key(o);
         
+        const isNew = !tileEls.has(k);
+
         store.set(k, o);
         lastSeen.set(k, Date.now());
         render(o);
-        sortTiles();
+        
+        if (isNew) {
+          sortTiles();
+        }
         
         // Refresh any graphs showing this sensor
         graphs.forEach(gt => {
