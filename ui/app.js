@@ -37,6 +37,7 @@ let menuEl = null;                // Context menu element
 // Touch-drag state (for coarse pointers where HTML5 drag isn't reliable)
 let touchDragState = null;
 
+
 // Suppress Chromium's native context menu (right-click / touch-and-hold).
 // We provide our own tile menu instead.
 document.addEventListener('contextmenu', (e) => {
@@ -166,7 +167,7 @@ function ensureTile(o) {
 }
 
 /* ==========================================================================
- * TOUCH DRAG (reTerminal-like)
+ * TOUCH DRAG (reTerminal-like) — FULL REPLACEMENT
  * ==========================================================================
  */
 
@@ -177,15 +178,15 @@ function installTouchDrag(tileEl) {
 
   const isLikelyTouchEnvironment = () => {
     const maxTp = Number(navigator.maxTouchPoints || 0);
-    const hoverNone = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+    const hoverNone = !!(window.matchMedia && window.matchMedia("(hover: none)").matches);
     return maxTp > 0 || hoverNone;
   };
 
   const isTouchLikePointerEvent = (e) => {
     // On Chromium/X11 some touchscreens appear as pointerType=mouse.
     if (!e || !e.pointerType) return isLikelyTouchEnvironment();
-    if (e.pointerType === 'touch' || e.pointerType === 'pen') return true;
-    if (e.pointerType === 'mouse') return isLikelyTouchEnvironment();
+    if (e.pointerType === "touch" || e.pointerType === "pen") return true;
+    if (e.pointerType === "mouse") return isLikelyTouchEnvironment();
     return false;
   };
 
@@ -220,7 +221,7 @@ function installTouchDrag(tileEl) {
     }, MENU_HOLD_MS);
   };
 
-  const maybeStartDragFromMove = (tile, clientX, clientY) => {
+  const maybeStartDragFromMove = (tile, clientX, clientY, originalEvent) => {
     if (touchDragState) return;
     if (!movedBeyondThreshold(clientX, clientY)) return;
 
@@ -241,14 +242,18 @@ function installTouchDrag(tileEl) {
     }
 
     dragStarted = true;
-    startTouchDrag(tile, { clientX, clientY });
+
+    // IMPORTANT: prevent the browser from stealing the gesture (scroll -> pointercancel)
+    originalEvent?.preventDefault?.();
+
+    startTouchDrag(tile, originalEvent || { clientX, clientY });
   };
 
-  // Prefer Pointer Events when available (Chromium, modern WebKit).
-  if ('PointerEvent' in window) {
+  // Prefer Pointer Events when available.
+  if ("PointerEvent" in window) {
     const onPointerDown = (e) => {
-      // Primary button only (avoid right-click / secondary).
-      if (typeof e.button === 'number' && e.button !== 0) return;
+      // Primary only.
+      if (typeof e.button === "number" && e.button !== 0) return;
       if (!tileEl.dataset.k) return;
 
       const touchLike = isTouchLikePointerEvent(e);
@@ -261,6 +266,10 @@ function installTouchDrag(tileEl) {
       startX = e.clientX;
       startY = e.clientY;
 
+      // Capture pointer so we reliably get pointerup even if finger leaves the tile.
+      // (This is the big fix on many Linux touch stacks.)
+      try { tileEl.setPointerCapture(e.pointerId); } catch {}
+
       scheduleMenuOnly(tileEl, startX, startY);
     };
 
@@ -270,11 +279,11 @@ function installTouchDrag(tileEl) {
       const touchLike = isTouchLikePointerEvent(e);
       if (!touchLike) return;
 
-      // Start drag immediately on vertical intent.
-      maybeStartDragFromMove(tileEl, e.clientX, e.clientY);
+      // Start drag on vertical intent.
+      maybeStartDragFromMove(tileEl, e.clientX, e.clientY, e);
 
       if (touchDragState) {
-        e.preventDefault();
+        e.preventDefault(); // requires CSS touch-action to be effective
         updateTouchDrag(e.clientX, e.clientY);
       }
     };
@@ -287,6 +296,7 @@ function installTouchDrag(tileEl) {
 
       clearTimers();
 
+      // Treat cancel like an end; cancel is common on touch hardware.
       if (touchDragState) {
         e.preventDefault();
         await finishTouchDrag(e.clientX, e.clientY);
@@ -296,10 +306,10 @@ function installTouchDrag(tileEl) {
       dragStarted = false;
     };
 
-    tileEl.addEventListener('pointerdown', onPointerDown, { passive: true });
-    tileEl.addEventListener('pointermove', onPointerMove, { passive: false });
-    tileEl.addEventListener('pointerup', onPointerUpOrCancel, { passive: false });
-    tileEl.addEventListener('pointercancel', onPointerUpOrCancel, { passive: false });
+    tileEl.addEventListener("pointerdown", onPointerDown, { passive: true });
+    tileEl.addEventListener("pointermove", onPointerMove, { passive: false });
+    tileEl.addEventListener("pointerup", onPointerUpOrCancel, { passive: false });
+    tileEl.addEventListener("pointercancel", onPointerUpOrCancel, { passive: false });
     return;
   }
 
@@ -330,10 +340,9 @@ function installTouchDrag(tileEl) {
     const t = getTouchById(e.touches, touchId);
     if (!t) return;
 
-    maybeStartDragFromMove(tileEl, t.clientX, t.clientY);
+    maybeStartDragFromMove(tileEl, t.clientX, t.clientY, e);
 
     if (touchDragState) {
-      // Prevent the page/strip from scrolling while dragging.
       e.preventDefault();
       updateTouchDrag(t.clientX, t.clientY);
     }
@@ -357,18 +366,17 @@ function installTouchDrag(tileEl) {
     dragStarted = false;
   };
 
-  tileEl.addEventListener('touchstart', onTouchStart, { passive: true });
-  tileEl.addEventListener('touchmove', onTouchMove, { passive: false });
-  tileEl.addEventListener('touchend', onTouchEndOrCancel, { passive: false });
-  tileEl.addEventListener('touchcancel', onTouchEndOrCancel, { passive: false });
+  tileEl.addEventListener("touchstart", onTouchStart, { passive: true });
+  tileEl.addEventListener("touchmove", onTouchMove, { passive: false });
+  tileEl.addEventListener("touchend", onTouchEndOrCancel, { passive: false });
+  tileEl.addEventListener("touchcancel", onTouchEndOrCancel, { passive: false });
 
   // Mouse-event fallback (touchscreens that emulate mouse, esp. on X11).
-  // Only enable this on likely-touch environments to avoid changing desktop mouse behavior.
   if (isLikelyTouchEnvironment()) {
     let windowHandlersAttached = false;
 
     const onMouseDown = (e) => {
-      if (typeof e.button === 'number' && e.button !== 0) return;
+      if (typeof e.button === "number" && e.button !== 0) return;
       if (!tileEl.dataset.k) return;
       if (touchDragState) return;
 
@@ -378,18 +386,17 @@ function installTouchDrag(tileEl) {
 
       scheduleMenuOnly(tileEl, startX, startY);
 
-      // Attach global listeners only for the active interaction.
       if (!windowHandlersAttached) {
         windowHandlersAttached = true;
-        window.addEventListener('mousemove', onMouseMove, { passive: false });
-        window.addEventListener('mouseup', onMouseUp, { passive: false });
+        window.addEventListener("mousemove", onMouseMove, { passive: false });
+        window.addEventListener("mouseup", onMouseUp, { passive: false });
       }
     };
 
     const onMouseMove = (e) => {
       if (!mouseActive) return;
 
-      maybeStartDragFromMove(tileEl, e.clientX, e.clientY);
+      maybeStartDragFromMove(tileEl, e.clientX, e.clientY, e);
 
       if (touchDragState) {
         e.preventDefault();
@@ -409,35 +416,39 @@ function installTouchDrag(tileEl) {
 
       dragStarted = false;
 
-      // Detach global listeners after the interaction to avoid leaking handlers per tile.
       if (windowHandlersAttached) {
         windowHandlersAttached = false;
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
       }
     };
 
-    tileEl.addEventListener('mousedown', onMouseDown, { passive: true });
+    tileEl.addEventListener("mousedown", onMouseDown, { passive: true });
   }
 }
 
 function startTouchDrag(tileEl, e) {
   closeTileMenu();
   draggedTile = tileEl;
-  draggedTile.classList.add('dragging');
+  draggedTile.classList.add("dragging");
   showTrash();
 
-  // Capture moves globally so we don't lose events when the finger leaves the tile.
-  const overlay = document.createElement('div');
-  overlay.className = 'drag-overlay';
-  overlay.addEventListener('contextmenu', (ev) => ev.preventDefault(), { capture: true });
+  // Create overlay to capture all move/up events reliably.
+  const overlay = document.createElement("div");
+  overlay.className = "drag-overlay";
+  overlay.addEventListener("contextmenu", (ev) => ev.preventDefault(), { capture: true });
+
+  // Prevent click-through / accidental selections while dragging
+  overlay.addEventListener("pointerdown", (ev) => ev.preventDefault?.(), { passive: false });
+  overlay.addEventListener("touchstart", (ev) => ev.preventDefault?.(), { passive: false });
+
   document.body.appendChild(overlay);
 
   const ghost = tileEl.cloneNode(true);
-  ghost.classList.add('tile-ghost');
-  ghost.removeAttribute('draggable');
-  ghost.style.width = tileEl.getBoundingClientRect().width + 'px';
-  ghost.style.height = tileEl.getBoundingClientRect().height + 'px';
+  ghost.classList.add("tile-ghost");
+  ghost.removeAttribute("draggable");
+  ghost.style.width = tileEl.getBoundingClientRect().width + "px";
+  ghost.style.height = tileEl.getBoundingClientRect().height + "px";
   document.body.appendChild(ghost);
 
   touchDragState = {
@@ -449,13 +460,13 @@ function startTouchDrag(tileEl, e) {
     offsetY: 24,
     finishing: false,
     cleanup: null,
+    usingCapture: false,
+    pointerId: null,
   };
 
-  // Track drag on the overlay itself (most reliable on Chromium/X11 touch stacks).
-  // This avoids missing pointer/touch/mouse up events due to retargeting.
   const getXY = (ev) => {
     if (!ev) return null;
-    if (typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
+    if (typeof ev.clientX === "number" && typeof ev.clientY === "number") {
       return { x: ev.clientX, y: ev.clientY };
     }
     if (ev.touches && ev.touches.length) {
@@ -476,42 +487,47 @@ function startTouchDrag(tileEl, e) {
   };
 
   const onEnd = async (ev) => {
-    const pt = getXY(ev) || { x: e.clientX, y: e.clientY };
+    const pt = getXY(ev) || { x: e?.clientX ?? 0, y: e?.clientY ?? 0 };
     ev.preventDefault?.();
     await finishTouchDrag(pt.x, pt.y);
   };
 
   // Pointer Events
-  if ('PointerEvent' in window) {
-    overlay.addEventListener('pointermove', onMove, { passive: false });
-    overlay.addEventListener('pointerup', onEnd, { passive: false });
-    overlay.addEventListener('pointercancel', onEnd, { passive: false });
-    if (typeof e.pointerId === 'number' && typeof overlay.setPointerCapture === 'function') {
-      try { overlay.setPointerCapture(e.pointerId); } catch {}
+  if ("PointerEvent" in window) {
+    overlay.addEventListener("pointermove", onMove, { passive: false });
+    overlay.addEventListener("pointerup", onEnd, { passive: false });
+    overlay.addEventListener("pointercancel", onEnd, { passive: false });
+
+    if (typeof e?.pointerId === "number" && typeof overlay.setPointerCapture === "function") {
+      try {
+        overlay.setPointerCapture(e.pointerId);
+        touchDragState.usingCapture = true;
+        touchDragState.pointerId = e.pointerId;
+      } catch {}
     }
   }
 
   // Touch Events
-  overlay.addEventListener('touchmove', onMove, { passive: false });
-  overlay.addEventListener('touchend', onEnd, { passive: false });
-  overlay.addEventListener('touchcancel', onEnd, { passive: false });
+  overlay.addEventListener("touchmove", onMove, { passive: false });
+  overlay.addEventListener("touchend", onEnd, { passive: false });
+  overlay.addEventListener("touchcancel", onEnd, { passive: false });
 
   // Mouse Events
-  overlay.addEventListener('mousemove', onMove, { passive: false });
-  overlay.addEventListener('mouseup', onEnd, { passive: false });
+  overlay.addEventListener("mousemove", onMove, { passive: false });
+  overlay.addEventListener("mouseup", onEnd, { passive: false });
 
   touchDragState.cleanup = () => {
-    overlay.removeEventListener('pointermove', onMove);
-    overlay.removeEventListener('pointerup', onEnd);
-    overlay.removeEventListener('pointercancel', onEnd);
-    overlay.removeEventListener('touchmove', onMove);
-    overlay.removeEventListener('touchend', onEnd);
-    overlay.removeEventListener('touchcancel', onEnd);
-    overlay.removeEventListener('mousemove', onMove);
-    overlay.removeEventListener('mouseup', onEnd);
+    overlay.removeEventListener("pointermove", onMove);
+    overlay.removeEventListener("pointerup", onEnd);
+    overlay.removeEventListener("pointercancel", onEnd);
+    overlay.removeEventListener("touchmove", onMove);
+    overlay.removeEventListener("touchend", onEnd);
+    overlay.removeEventListener("touchcancel", onEnd);
+    overlay.removeEventListener("mousemove", onMove);
+    overlay.removeEventListener("mouseup", onEnd);
   };
 
-  updateTouchDrag(e.clientX, e.clientY);
+  updateTouchDrag(e?.clientX ?? startX, e?.clientY ?? startY);
 }
 
 function updateTouchDrag(clientX, clientY) {
@@ -522,27 +538,27 @@ function updateTouchDrag(clientX, clientY) {
   const y = clientY - touchDragState.offsetY;
   touchDragState.ghost.style.transform = `translate(${x}px, ${y}px)`;
 
-  // Hit-test drop targets
-  // Hit-test: ignore our overlay so we can detect underlying drop targets.
-  const prevPe = touchDragState.overlay ? touchDragState.overlay.style.pointerEvents : '';
-  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = 'none';
+  // Hit-test drop targets (ignore overlay so we can detect underlying elements)
+  const prevPe = touchDragState.overlay ? touchDragState.overlay.style.pointerEvents : "";
+  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = "none";
   const under = document.elementFromPoint(clientX, clientY);
   if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = prevPe;
+
   const graphEl = under ? under.closest?.('.graph-tile[data-graph="true"]') : null;
-  const trashEl = under ? under.closest?.('#trash') : null;
+  const trashEl = under ? under.closest?.("#trash") : null;
 
   // Graph hover styling
   if (touchDragState.overGraphEl && touchDragState.overGraphEl !== graphEl) {
-    touchDragState.overGraphEl.classList.remove('chart-over');
+    touchDragState.overGraphEl.classList.remove("chart-over");
   }
   if (graphEl) {
-    graphEl.classList.add('chart-over');
+    graphEl.classList.add("chart-over");
   }
   touchDragState.overGraphEl = graphEl;
 
   // Trash hover styling
   const isOverTrash = !!trashEl;
-  trash.classList.toggle('over', isOverTrash);
+  trash.classList.toggle("over", isOverTrash);
   touchDragState.overTrash = isOverTrash;
 }
 
@@ -551,16 +567,15 @@ async function finishTouchDrag(clientX, clientY) {
   if (touchDragState.finishing) return;
   touchDragState.finishing = true;
 
-  // Some stacks won't fire a final move event before up; update hover on release.
+  // Final hover update
   updateTouchDrag(clientX, clientY);
 
-  // Determine final target based on current hover
   const dropOnTrash = touchDragState.overTrash;
   const dropOnGraphEl = touchDragState.overGraphEl;
 
   // Cleanup hover styles
-  if (dropOnGraphEl) dropOnGraphEl.classList.remove('chart-over');
-  trash.classList.remove('over');
+  if (dropOnGraphEl) dropOnGraphEl.classList.remove("chart-over");
+  trash.classList.remove("over");
 
   // Perform drop action
   if (draggedTile && draggedTile.dataset.k) {
@@ -568,32 +583,26 @@ async function finishTouchDrag(clientX, clientY) {
 
     if (dropOnTrash) {
       mutedUntilNextUpdate.add(k);
-      draggedTile.style.display = 'none';
-
+      draggedTile.style.display = "none";
     } else if (dropOnGraphEl) {
-      const gt = graphs.find(g => g.el === dropOnGraphEl);
+      const gt = graphs.find((g) => g.el === dropOnGraphEl);
       if (gt) {
         gt.key = k;
-        await gt.draw();
+        await gt.draw?.(); // if you have draw(); otherwise refresh()
+        if (!gt.draw) await gt.refresh?.();
       }
     }
   }
 
   // Cleanup drag state
-  if (touchDragState.cleanup) {
-    try { touchDragState.cleanup(); } catch {}
-  }
-  if (touchDragState.overlay) {
-    touchDragState.overlay.remove();
-  }
-  if (touchDragState.ghost) {
-    touchDragState.ghost.remove();
-  }
+  try { touchDragState.cleanup?.(); } catch {}
+
+  try { touchDragState.overlay?.remove(); } catch {}
+  try { touchDragState.ghost?.remove(); } catch {}
+
   touchDragState = null;
 
-  if (draggedTile) {
-    draggedTile.classList.remove('dragging');
-  }
+  if (draggedTile) draggedTile.classList.remove("dragging");
   draggedTile = null;
   hideTrash();
 }

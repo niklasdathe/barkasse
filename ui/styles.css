@@ -1,3 +1,7 @@
+#topics { touch-action: pan-x; }     /* allow horizontal scroll */
+.drag-overlay { touch-action: none; } /* once dragging, disable gestures */
+
+
 /* --- Tunables --- */
 /* Adjust most sizing/colors via CSS custom properties below. */
 :root{
