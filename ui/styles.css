@@ -224,3 +224,69 @@ header {
 .tile-menu .menu-item:hover{
   background:rgba(0,0,0,.08); /* hover color */
 }
+
+/* ===== Modal Dialog ===== */
+.modal-overlay {
+  position:fixed; inset:0; z-index:5000;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(4px);
+  display:flex; align-items:center; justify-content:center;
+}
+.modal {
+  background:#fff;
+  width:90%; max-width:500px;
+  border-radius:16px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  animation: modalPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes modalPop {
+  from { transform: scale(0.9); opacity:0; }
+  to { transform: scale(1); opacity:1; }
+}
+.modal-header {
+  padding:16px 20px;
+  border-bottom:1px solid #eee;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.modal-header h2 { margin:0; font-size:18px; }
+.close-btn {
+  background:none; border:none; font-size:24px; line-height:1;
+  padding:0 8px; cursor:pointer; color:#888;
+}
+.modal-body { padding:20px; display:flex; flex-direction:column; gap:20px; }
+
+.form-group { display:flex; flex-direction:column; gap:8px; }
+.form-group label { font-size:14px; color:#555; font-weight:600; }
+.label-row { display:flex; justify-content:space-between; align-items:baseline; }
+.text-btn { background:none; border:none; color:#007bff; cursor:pointer; font-size:13px; padding:0; }
+
+.input-lg {
+  padding:12px; font-size:16px; 
+  border:2px solid #ddd; border-radius:8px;
+  background:#f9f9f9; width:100%; box-sizing:border-box;
+}
+.input-lg:focus { border-color:#007bff; outline:none; background:#fff; }
+
+.new-topic-grid { display:flex; flex-direction:column; gap:10px; }
+.form-grid { display:grid; grid-template-columns:2fr 1fr; gap:12px; }
+
+.modal-footer {
+  padding:16px 20px; background:#f5f5f5;
+  display:flex; justify-content:flex-end; gap:12px;
+}
+.btn {
+  padding:12px 20px; border-radius:8px; border:none;
+  font-size:16px; font-weight:600; cursor:pointer;
+  background:#ddd; color:#333;
+}
+.primary-btn { background:#007bff; color:#fff; }
+.primary-btn:active { background:#0056b3; }
+
+#manual-send-btn { min-width: 160px; text-align: center; }
+
+/* Mobile optimization for inputs */
+input[type="number"], input[type="text"], select {
+  -webkit-appearance: none;
+}

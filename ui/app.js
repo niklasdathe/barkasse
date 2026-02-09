@@ -678,6 +678,7 @@ function openHeaderMenu(anchorBtn) {
   headerMenuEl = document.createElement('div');
   headerMenuEl.className = 'tile-menu';
   headerMenuEl.innerHTML = `
+    <button class="menu-item" data-action="manual-input" aria-label="Enter manual value">Input manual value…</button>
     <button class="menu-item" data-action="clear-all" aria-label="Clear all history">Clear history…</button>
     <button class="menu-item" data-action="toggle-fullscreen" aria-label="Toggle fullscreen">Toggle fullscreen</button>
     <button class="menu-item" data-action="refresh-page" aria-label="Refresh page">Refresh page</button>
@@ -685,7 +686,7 @@ function openHeaderMenu(anchorBtn) {
 
   // Position below the anchor button
   const rect = anchorBtn.getBoundingClientRect();
-  headerMenuEl.style.left = (rect.right - 160) + 'px'; // align to right-ish
+  headerMenuEl.style.left = (rect.right - 180) + 'px'; // align to right-ish
   headerMenuEl.style.top = (rect.bottom + 4) + 'px';
 
   document.body.appendChild(headerMenuEl);
@@ -699,6 +700,10 @@ function openHeaderMenu(anchorBtn) {
   document.addEventListener('click', onDocClick, true);
 
   // Actions
+  headerMenuEl.querySelector('[data-action="manual-input"]').addEventListener('click', () => {
+    closeHeaderMenu();
+    openManualInputModal();
+  });
   headerMenuEl.querySelector('[data-action="clear-all"]').addEventListener('click', async () => {
     closeHeaderMenu();
     const proceed = confirm('Delete stored history on this Raspberry Pi? This cannot be undone.');
@@ -1248,17 +1253,19 @@ class GraphTile {
 
         // Prepare tooltip text
         const dateObj = new Date(closest.ts);
-        const dateStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateOnlyStr = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const valStr = `${closest.value.toFixed(2)} ${unit || ''}`;
 
         // Measure text for box
         ctx.font = '12px system-ui';
-        const dateW = ctx.measureText(dateStr).width;
+        const dateOnlyW = ctx.measureText(dateOnlyStr).width;
+        const timeW = ctx.measureText(timeStr).width;
         ctx.font = 'bold 12px system-ui';
         const valW = ctx.measureText(valStr).width;
         
-        const boxW = Math.max(dateW, valW) + 16;
-        const boxH = 38;
+        const boxW = Math.max(dateOnlyW, timeW, valW) + 16;
+        const boxH = 52;
         
         // Position tooltip near the point, but keep it inside canvas
         let tx = cx + 10; 
@@ -1291,11 +1298,12 @@ class GraphTile {
         ctx.textBaseline = 'top';
         
         ctx.font = '12px system-ui';
-        ctx.fillText(dateStr, tx + 8, ty + 6);
+        ctx.fillText(dateOnlyStr, tx + 8, ty + 6);
+        ctx.fillText(timeStr, tx + 8, ty + 20);
         
         ctx.fillStyle = '#000';
         ctx.font = 'bold 12px system-ui';
-        ctx.fillText(valStr, tx + 8, ty + 20);
+        ctx.fillText(valStr, tx + 8, ty + 34);
       }
     }
   }
@@ -1533,5 +1541,146 @@ if (headerMenuBtn) {
   headerMenuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openHeaderMenu(headerMenuBtn);
+  });
+}
+
+/* ============================================================================
+ * MANUAL INPUT MODAL
+ * ============================================================================ */
+
+const manualModal = document.getElementById('manual-modal');
+const manualSelect = document.getElementById('manual-select-topic');
+const manualNewWrap = document.getElementById('manual-new-topic-wrap');
+const manualToggleBtn = document.getElementById('manual-toggle-new');
+const manualSendBtn = document.getElementById('manual-send-btn');
+const manualCancelBtn = document.getElementById('manual-cancel-btn');
+const manualCloseBtn = document.getElementById('manual-close-btn');
+
+let isNewTopicMode = false;
+
+function openManualInputModal() {
+  // Populate select with existing topics
+  manualSelect.innerHTML = '';
+  const sortedKeys = Array.from(store.keys()).sort();
+  sortedKeys.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = k;
+    manualSelect.appendChild(opt);
+  });
+  
+  if (sortedKeys.length === 0) {
+    // Force new mode if no topics
+    isNewTopicMode = true;
+  } else {
+    isNewTopicMode = false;
+  }
+  
+  updateManualMode();
+  
+  // Clear values
+  document.getElementById('manual-value').value = '';
+  
+  // Show modal
+  manualModal.style.display = 'flex';
+  
+  // Focus value input (trigger keyboard)
+  setTimeout(() => {
+    document.getElementById('manual-value').focus();
+  }, 100);
+}
+
+function closeManualModal() {
+  manualModal.style.display = 'none';
+}
+
+function updateManualMode() {
+  if (isNewTopicMode) {
+    manualSelect.style.display = 'none';
+    manualNewWrap.style.display = 'flex';
+    manualToggleBtn.textContent = 'Select Existing Topic';
+  } else {
+    manualSelect.style.display = 'block';
+    manualNewWrap.style.display = 'none';
+    manualToggleBtn.textContent = 'Create New Topic';
+  }
+}
+
+// Event Listeners for Manual Modal
+if (manualToggleBtn) {
+  manualToggleBtn.addEventListener('click', () => {
+    isNewTopicMode = !isNewTopicMode;
+    updateManualMode();
+  });
+}
+
+[manualCloseBtn, manualCancelBtn].forEach(btn => {
+  if(btn) btn.addEventListener('click', closeManualModal);
+});
+
+if (manualSendBtn) {
+  manualSendBtn.addEventListener('click', async () => {
+    const valStr = document.getElementById('manual-value').value;
+    if (valStr === '') {
+      alert('Please enter a value');
+      return;
+    }
+    const val = parseFloat(valStr);
+    const unit = document.getElementById('manual-unit').value;
+    
+    let node, cluster, sensor;
+    
+    if (isNewTopicMode) {
+      node = document.getElementById('manual-node').value.trim() || 'manual';
+      cluster = document.getElementById('manual-cluster').value.trim() || 'manual';
+      sensor = document.getElementById('manual-sensor').value.trim() || 'value';
+    } else {
+      // Parse key: "node/cluster/sensor"
+      const k = manualSelect.value;
+      const parts = k.split('/');
+      node = parts[0];
+      cluster = parts[1];
+      sensor = parts[2];
+      
+      // If we selected an existing topic, we might want to preserve unit if not specified
+      if (!unit && store.has(k)) {
+        // unit = store.get(k).unit; // Wait, we are sending to backend, backend handles it? 
+        // Backend takes input unit. If we send empty unit, backend uses empty unit.
+        // It's better if the user enters it if changed, or we can pre-fill it.
+        // For now, let's just send what is typed.
+      }
+    }
+    
+    const payload = {
+      node, cluster, sensor, value: val, unit
+    };
+    
+    try {
+      manualSendBtn.disabled = true;
+      manualSendBtn.textContent = 'Sending...';
+      
+      const res = await fetch('/api/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error('Failed to send');
+      
+      // Success: Keep modal open, show feedback, clear value
+      manualSendBtn.textContent = 'Sent!';
+      document.getElementById('manual-value').value = '';
+      document.getElementById('manual-value').focus();
+
+      setTimeout(() => {
+        manualSendBtn.disabled = false;
+        manualSendBtn.textContent = 'Send Update';
+      }, 750);
+      
+    } catch (e) {
+      alert('Error sending value: ' + e.message);
+      manualSendBtn.disabled = false;
+      manualSendBtn.textContent = 'Send Update';
+    }
   });
 }
