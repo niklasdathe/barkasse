@@ -451,9 +451,18 @@ function startTouchDrag(tileEl, e) {
   ghost.style.height = tileEl.getBoundingClientRect().height + "px";
   document.body.appendChild(ghost);
 
+  // Performance: Cache drop targets to avoid elementFromPoint in loop
+  const targets = [];
+  document.querySelectorAll('.graph-tile[data-graph="true"]').forEach(el => {
+    targets.push({ el, rect: el.getBoundingClientRect(), type: 'graph' });
+  });
+  const trashEl = document.getElementById('trash');
+  if (trashEl) targets.push({ el: trashEl, rect: trashEl.getBoundingClientRect(), type: 'trash' });
+
   touchDragState = {
     overlay,
     ghost,
+    targets,
     overGraphEl: null,
     overTrash: false,
     offsetX: 24,
@@ -538,14 +547,27 @@ function updateTouchDrag(clientX, clientY) {
   const y = clientY - touchDragState.offsetY;
   touchDragState.ghost.style.transform = `translate(${x}px, ${y}px)`;
 
-  // Hit-test drop targets (ignore overlay so we can detect underlying elements)
-  const prevPe = touchDragState.overlay ? touchDragState.overlay.style.pointerEvents : "";
-  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = "none";
-  const under = document.elementFromPoint(clientX, clientY);
-  if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = prevPe;
+  // Hit-test drop targets using cached rects (avoiding layout thrashing)
+  let graphEl = null;
+  let trashEl = null;
 
-  const graphEl = under ? under.closest?.('.graph-tile[data-graph="true"]') : null;
-  const trashEl = under ? under.closest?.("#trash") : null;
+  if (touchDragState.targets) {
+    for (const t of touchDragState.targets) {
+      if (clientX >= t.rect.left && clientX <= t.rect.right &&
+          clientY >= t.rect.top && clientY <= t.rect.bottom) {
+        if (t.type === 'graph') graphEl = t.el;
+        if (t.type === 'trash') trashEl = t.el; 
+      }
+    }
+  } else {
+    // Fallback if no targets cached (shouldn't happen with new code)
+    const prevPe = touchDragState.overlay ? touchDragState.overlay.style.pointerEvents : "";
+    if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = "none";
+    const under = document.elementFromPoint(clientX, clientY);
+    if (touchDragState.overlay) touchDragState.overlay.style.pointerEvents = prevPe;
+    graphEl = under ? under.closest?.('.graph-tile[data-graph="true"]') : null;
+    trashEl = under ? under.closest?.("#trash") : null;
+  }
 
   // Graph hover styling
   if (touchDragState.overGraphEl && touchDragState.overGraphEl !== graphEl) {

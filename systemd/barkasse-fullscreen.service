@@ -23,15 +23,37 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do [ -f /home/hub/.Xauthority ] 
 # Wait for the Xorg socket
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do [ -S /tmp/.X11-unix/X0 ] && exit 0; sleep 0.25; done; echo "No X11 socket: /tmp/.X11-unix/X0"; exit 1'
 
-# Wait until the UI backend is responding on localhost:8080
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do curl -sSf http://localhost:8080/ >/dev/null 2>&1 && exit 0; sleep 0.25; done; echo "UI backend not reachable on :8080"; exit 1'
+# Wait until the UI backend is responding on localhost:8443 (HTTPS, self-signed)
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 120); do curl -ksSf https://localhost:8443/ >/dev/null 2>&1 && exit 0; sleep 0.25; done; echo "UI backend not reachable on :8443"; exit 1'
 
-# Fullscreen.
+# Patch Chromium prefs so it never shows "Restore tabs?" after unclean shutdown.
+# systemd sends SIGTERM on stop/reboot — Chromium records that as "Crashed".
+ExecStartPre=/bin/sh -c '\
+  PREFS="/home/hub/.config/chromium/Default/Preferences"; \
+  if [ -f "$PREFS" ]; then \
+    sed -i '\''s/"exit_type":"Crashed"/"exit_type":"Normal"/g'\'' "$PREFS"; \
+    sed -i '\''s/"exited_cleanly":false/"exited_cleanly":true/g'\'' "$PREFS"; \
+  fi'
+
+# Fullscreen (F11 to exit, Ctrl+W to close).
+# Chromium 109 flags:
+#   --start-fullscreen     F11-style fullscreen (user can exit with F11)
+#   --allow-insecure-localhost  Accept self-signed TLS certs on localhost
+#   --no-first-run         Skip first-run wizard
+#   --no-default-browser-check  No default browser prompt
+#   --noerrdialogs         Suppress error dialogs
+#   --disable-logging      Reduce log spam
+#   --disable-dev-shm-usage     Use /tmp instead of /dev/shm (low-memory ARM)
+#   --disable-session-crashed-bubble  Suppress "restore tabs" infobar
+#   --disable-infobars     Suppress other infobars (deprecated but still works on 109)
 ExecStart=/usr/bin/chromium-browser \
   --new-window \
-  --incognito --start-fullscreen \
-  --no-first-run --no-default-browser-check --noerrdialogs --disable-infobars --disable-logging \
-  --app=http://localhost:8080/
+  --start-fullscreen \
+  --allow-insecure-localhost \
+  --no-first-run --no-default-browser-check --noerrdialogs \
+  --disable-logging --disable-dev-shm-usage \
+  --disable-session-crashed-bubble --disable-infobars \
+  https://localhost:8443/
 
 Restart=always
 RestartSec=5

@@ -11,10 +11,10 @@ User=hub
 Group=hub
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WorkingDirectory=/home/hub/barkasse-hub
-ExecStartPre=/usr/bin/test -d /home/hub/barkasse-hub/nodered_data
-ExecStartPre=/usr/bin/test -f /home/hub/barkasse-hub/nodered_data/flows.json
-ExecStartPre=/usr/bin/test -f /home/hub/barkasse-hub/nodered_data/settings.js
-ExecStart=/usr/bin/env node-red --userDir /home/hub/barkasse-hub/nodered_data --settings /home/hub/barkasse-hub/nodered_data/settings.js
+ExecStartPre=/usr/bin/test -d /home/hub/.node-red
+ExecStartPre=/usr/bin/test -f /home/hub/.node-red/flows.json
+ExecStartPre=/usr/bin/test -f /home/hub/.node-red/settings.js
+ExecStart=/usr/bin/env node-red
 Restart=always
 RestartSec=3
 

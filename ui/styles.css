@@ -14,7 +14,7 @@
   --pad-v: 6px;                 /* vertical padding around sections (top/bottom) */
   --card-radius: 16px;          /* corner radius for tiles/cards */
   --card-bg: rgba(255,255,255,.8); /* card background + transparency (last value) */
-  --shadow: 0 6px 14px rgba(0,0,0,.15); /* card shadow strength */
+  --shadow: 0 2px 4px rgba(0,0,0,.15); /* card shadow strength (reduced for performance) */
 }
 
 /* ===== Base / Layout ===== */
@@ -31,7 +31,7 @@ body, .tile, #topics{
 #bg {
   position:fixed; inset:0;
   background:url('/assets/background.png') center/cover no-repeat; /* swap background image path */
-  filter:contrast(1.05) saturate(1.05); /* adjust image punch/saturation */
+  /* filter:contrast(1.05) saturate(1.05); removed for performance */
 }
 #hud {
   position:relative; z-index:2;
@@ -50,7 +50,7 @@ header {
 .header-right{ display:flex; align-items:center; gap:10px; }
 .header-right button{
   border:0; border-radius:999px; padding:6px 12px; cursor:pointer;
-  background:rgba(255,255,255,.2); color:#fff; backdrop-filter:blur(4px); /* tweak button style */
+  background:rgba(255,255,255,.2); color:#fff; /* backdrop-filter:blur(4px); removed for performance */
 }
 .header-right button:disabled{ opacity:.7; cursor:default; }
 .header-menu-btn{
@@ -86,6 +86,7 @@ header {
 .tile{
   flex:0 0 var(--tile-w);
   height:var(--tile-h);
+  contain: strict; /* Performance: isolate layout, style, and paint */
 
   position:relative;
   background:var(--card-bg);       /* card color/transparency */
@@ -93,7 +94,7 @@ header {
   padding:12px 14px;
   box-shadow:var(--shadow);        /* card shadow */
   cursor:grab;
-  transition:transform .12s ease, box-shadow .12s ease, opacity .3s;
+  transition:transform .12s ease, opacity .3s; /* removed box-shadow transition */
   overflow:hidden;
   touch-action: pan-x;
 }
@@ -230,7 +231,7 @@ header {
 .modal-overlay {
   position:fixed; inset:0; z-index:5000;
   background:rgba(0,0,0,0.6);
-  backdrop-filter:blur(4px);
+  /* backdrop-filter:blur(4px); removed for performance */
   display:flex; align-items:center; justify-content:center;
 }
 .modal {

@@ -5,3 +5,9 @@ nodered_data/lib/
 nodered_data/node_modules/
 nodered_data/.node-red/
 
+# ── Security / Secrets (never commit) ──
+certs/
+mosquitto/passwd
+*.key
+*.pem
+
