@@ -17,8 +17,7 @@
 // The hub runs chrony and serves NTP on eth0 (UDP/123).
 #define NTP_HOST "192.168.10.10"
 
-// Mosquitto on the hub is currently configured with allow_anonymous true,
-// so empty credentials work.
-// If you later enable authentication, set these to your username/password.
-#define MQTT_USER ""
-#define MQTT_PASS ""
+// Mosquitto on the hub requires authentication (allow_anonymous false).
+// Set these to the credentials configured in the Mosquitto password file.
+#define MQTT_USER "barkasse"
+#define MQTT_PASS "change-me"

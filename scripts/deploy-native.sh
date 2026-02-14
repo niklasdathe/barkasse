@@ -94,11 +94,11 @@ fi
 
 
 echo "[6/6] Smoke checks..."
-echo "- UI:        http://localhost:8080/"
-echo "- Node-RED:   http://localhost:8080/admin"
+echo "- UI:        https://localhost:8443/"
+echo "- Node-RED:  https://localhost:8443/admin"
 echo "- MQTT:       localhost:1883"
 
-curl -sSf http://localhost:8080/ >/dev/null && echo "OK: UI reachable" || echo "WARN: UI not reachable yet"
+curl -ksSf https://localhost:8443/ >/dev/null && echo "OK: UI reachable" || echo "WARN: UI not reachable yet (if setup-security.sh has not run yet, try http://localhost:1880/)"
 
 systemctl --no-pager --full status mosquitto | head -n 20 || true
 systemctl --no-pager --full status barkasse-ui.service | head -n 30 || true
